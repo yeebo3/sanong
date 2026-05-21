@@ -1,0 +1,10 @@
+{
+  "name": "sanong-career-profile",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "check": "node --check app.js",
+    "test": "npm run check"
+  }
+}

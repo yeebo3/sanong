@@ -122,6 +122,10 @@ input {
   min-height: calc(100vh - 172px);
 }
 
+#app:focus {
+  outline: none;
+}
+
 .section {
   padding: clamp(44px, 8vw, 88px) clamp(18px, 4vw, 48px);
 }
@@ -257,6 +261,15 @@ p {
   text-decoration: underline;
   text-decoration-thickness: 2px;
   text-underline-offset: 5px;
+}
+
+.hero .btn.secondary {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.hero .btn.secondary:hover,
+.hero .btn.secondary:focus-visible {
+  color: #fff;
 }
 
 .btn.warn {
@@ -523,6 +536,16 @@ p {
   gap: 14px;
 }
 
+.empty-state {
+  max-width: 720px;
+  padding-left: 18px;
+  border-left: 3px solid var(--gold);
+}
+
+.empty-state h2 {
+  margin-bottom: 8px;
+}
+
 .info-block {
   padding: 0 0 0 18px;
   border-left: 3px solid rgba(40, 105, 76, 0.46);
@@ -611,6 +634,47 @@ p {
 }
 
 .scenario-card p {
+  color: var(--muted);
+}
+
+.choice-panel {
+  display: grid;
+  gap: 18px;
+  margin-bottom: 34px;
+  padding: 20px 0 28px;
+  border-bottom: 1px solid var(--line);
+}
+
+.choice-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.choice-button {
+  min-height: 52px;
+  padding: 12px 14px;
+  border: 1px solid rgba(40, 105, 76, 0.24);
+  border-radius: var(--radius);
+  background: var(--field);
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 800;
+  text-align: left;
+}
+
+.choice-button:hover,
+.choice-button:focus-visible,
+.choice-button.is-active {
+  border-color: var(--green);
+  background: #edf5f0;
+  color: var(--green-dark);
+  outline: none;
+}
+
+.scenario-feedback {
+  padding-left: 18px;
+  border-left: 3px solid var(--green);
   color: var(--muted);
 }
 
@@ -717,6 +781,15 @@ p {
 
   .scenario-card {
     grid-template-columns: 1fr;
+  }
+
+  .choice-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .sticky-submit {
+    position: static;
+    margin-top: 0;
   }
 }
 

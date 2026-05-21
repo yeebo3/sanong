@@ -1,2 +1,2 @@
-task
-*.DS_Store
+.DS_Store
+.playwright-cli/
