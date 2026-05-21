@@ -128,6 +128,8 @@ input {
 
 .section {
   padding: clamp(44px, 8vw, 88px) clamp(18px, 4vw, 48px);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
 }
 
 .section.alt {
@@ -136,6 +138,14 @@ input {
 
 .section.tint {
   background: #edf5f7;
+}
+
+.page-hero {
+  padding: clamp(46px, 7vw, 76px) clamp(18px, 4vw, 48px);
+  background:
+    linear-gradient(135deg, rgba(14, 34, 24, 0.78), rgba(14, 34, 24, 0.46)),
+    url("image/beijing.png") center / cover;
+  border-bottom: 1px solid var(--line);
 }
 
 .container {
@@ -157,6 +167,8 @@ input {
 
 .hero-content {
   width: min(760px, 100%);
+  margin: 0 auto;
+  text-align: center;
 }
 
 .eyebrow {
@@ -197,9 +209,10 @@ p {
 
 .lead {
   max-width: 720px;
-  margin-top: 18px;
-  color: rgba(255, 255, 255, 0.88);
-  font-size: 20px;
+  margin: 18px auto 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 18px;
+  line-height: 1.7;
 }
 
 .section-intro {
@@ -221,6 +234,11 @@ p {
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 28px;
+}
+
+.hero-content .actions,
+.hero-content .button-row {
+  justify-content: center;
 }
 
 .btn {
@@ -293,6 +311,160 @@ p {
 .grid.two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+.section-heading-only {
+  margin-bottom: 16px;
+}
+
+.section-heading-only h2 {
+  margin-top: 4px;
+}
+
+.intro-panel {
+  max-width: 980px;
+  padding: 18px 20px;
+  margin-bottom: 22px;
+  border-left: 4px solid var(--green);
+  background: rgba(40, 105, 76, 0.05);
+  border-radius: 0 16px 16px 0;
+}
+
+.detail-traits {
+  margin-top: 10px;
+}
+
+.scenario-card-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.scenario-choice-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.choice-badge {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: var(--green);
+  color: #fff;
+  font-weight: 900;
+}
+
+.scenario-outcome {
+  display: grid;
+  gap: 8px;
+}
+
+.case-panel {
+  margin-top: 14px;
+}
+
+.section-heading-only {
+  margin-bottom: 18px;
+}
+
+.section-heading-only h2 {
+  margin-top: 4px;
+}
+
+.case-top {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.case-image {
+  min-height: 260px;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(40, 105, 76, 0.16);
+  background: #f7faf6;
+}
+
+.case-image-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.case-image-fallback {
+  display: grid;
+  place-items: center;
+  min-height: 260px;
+  color: var(--green);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.case-summary {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.case-quote {
+  color: var(--green-dark);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.case-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 22px;
+}
+
+.case-bio {
+  padding: 18px 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.case-columns h3 {
+  margin-bottom: 8px;
+}
+
+.persona-overview {
+  gap: 18px;
+}
+
+.persona-overview-card {
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fff, #f8fbf7);
+  box-shadow: 0 12px 24px rgba(24, 63, 46, 0.06);
+}
+
+.persona-overview-top {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.persona-index {
+  display: grid;
+  place-items: center;
+  min-width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--green);
+  color: #fff;
+  font-weight: 800;
+}
+
+.persona-overview-summary {
+  margin-bottom: 14px;
+  color: var(--muted);
+}
 
 .card {
   min-width: 0;
@@ -301,6 +473,29 @@ p {
   border: 0;
   border-radius: 0;
   box-shadow: none;
+}
+
+.detail-trait-card,
+.scenario-choice,
+.case-panel {
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fff, #f8fbf7);
+  box-shadow: 0 14px 30px rgba(24, 63, 46, 0.06);
+}
+
+.detail-trait-card {
+  display: grid;
+  gap: 10px;
+}
+
+.trait-kicker {
+  color: var(--green);
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .feature-card {
@@ -340,9 +535,8 @@ p {
 .page-hero {
   padding: clamp(46px, 7vw, 76px) clamp(18px, 4vw, 48px);
   background:
-    linear-gradient(135deg, rgba(245, 248, 244, 0.94), rgba(234, 243, 241, 0.92)),
-    url("https://images.unsplash.com/photo-1523741543316-beb7fc7023d8?auto=format&fit=crop&w=1600&q=80")
-      center / cover;
+    linear-gradient(135deg, rgba(245, 248, 244, 0.92), rgba(234, 243, 241, 0.88)),
+    url("image/beijing.png") center / cover;
   border-bottom: 1px solid var(--line);
 }
 
@@ -424,7 +618,7 @@ p {
   padding: 22px 0;
 }
 
-.question + .question {
+.question  .question {
   border-top: 1px solid var(--line);
 }
 
@@ -771,8 +965,14 @@ p {
   .grid.three,
   .grid.two,
   .result-layout,
-  .detail-hero {
+  .detail-hero,
+  .case-top,
+  .case-columns {
     grid-template-columns: 1fr;
+  }
+
+  .case-image {
+    min-height: 220px;
   }
 
   .options {
