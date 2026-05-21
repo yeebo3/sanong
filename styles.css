@@ -374,7 +374,7 @@ p {
 
 .case-top {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: minmax(280px, 320px) 1fr;
   gap: 24px;
   align-items: start;
 }
@@ -692,24 +692,34 @@ p {
 
 .result-layout {
   display: grid;
-  grid-template-columns: 0.86fr 1.14fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 24px;
-  align-items: stretch;
+  align-items: start;
+}
+
+.profile-card,
+.result-summary-card {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 247, 0.98));
+  box-shadow: 0 12px 26px rgba(24, 63, 46, 0.06);
 }
 
 .profile-card {
-  display: grid;
-  gap: 18px;
+  align-content: start;
 }
 
 .profile-visual {
-  min-height: 280px;
-  border-radius: var(--radius);
+  min-height: 260px;
+  border-radius: 18px;
   background:
-    linear-gradient(135deg, rgba(47, 111, 78, 0.88), rgba(75, 137, 168, 0.7)),
-    url("https://images.unsplash.com/photo-1599059813005-11265ba4b4ce?auto=format&fit=crop&w=1200&q=80")
-      center / cover;
+    linear-gradient(135deg, rgba(14, 34, 24, 0.82), rgba(40, 105, 76, 0.56)),
+    url("image/beijing.png") center / cover;
   font-size: 58px;
+  letter-spacing: 0.08em;
 }
 
 .tag-list {
@@ -725,9 +735,138 @@ p {
   font-weight: 600;
 }
 
+.result-content {
+  display: grid;
+  gap: 18px;
+}
+
+.result-lead-block {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: start;
+  padding: 18px 20px;
+  border: 1px solid rgba(40, 105, 76, 0.14);
+  border-radius: 18px;
+  background: rgba(40, 105, 76, 0.04);
+}
+
+.result-lead-kicker {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: var(--green);
+  color: #fff;
+  font-weight: 800;
+}
+
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.result-grid .info-block {
+  min-height: 100%;
+}
+
+.result-block-1 {
+  border-left-color: rgba(40, 105, 76, 0.46);
+}
+
+.result-block-2 {
+  border-left-color: rgba(63, 127, 157, 0.5);
+}
+
+.result-block-3 {
+  border-left-color: rgba(184, 121, 37, 0.46);
+}
+
+.result-actions {
+  margin-top: 4px;
+}
+
+.scenario-carousel {
+  margin-top: 8px;
+}
+
+.scenario-carousel-panel {
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 251, 247, 0.96));
+  box-shadow: 0 12px 26px rgba(24, 63, 46, 0.06);
+}
+
+.scenario-carousel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.scenario-kicker {
+  color: var(--green);
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.scenario-carousel-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.scenario-indicator-bar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 72px;
+  padding: 6px 10px;
+  border: 1px solid rgba(40, 105, 76, 0.14);
+  border-radius: 999px;
+  background: rgba(40, 105, 76, 0.04);
+}
+
+.scenario-indicator {
+  width: 14px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(40, 105, 76, 0.18);
+}
+
+.scenario-indicator.is-active {
+  width: 24px;
+  background: var(--green);
+}
+
+.scenario-counter {
+  min-width: 84px;
+  padding: 10px 14px;
+  border: 1px solid rgba(40, 105, 76, 0.18);
+  border-radius: 999px;
+  background: rgba(40, 105, 76, 0.05);
+  color: var(--green-dark);
+  font-weight: 800;
+  text-align: center;
+}
+
+.scenario-nav {
+  min-height: 42px;
+  padding-inline: 16px;
+}
+
+.scenario-intro {
+  margin-bottom: 18px;
+}
+
 .split-list {
   display: grid;
-  gap: 14px;
+  gap: 16px;
 }
 
 .empty-state {
@@ -741,10 +880,10 @@ p {
 }
 
 .info-block {
-  padding: 0 0 0 18px;
+  padding: 18px 18px 18px 20px;
   border-left: 3px solid rgba(40, 105, 76, 0.46);
-  background: transparent;
-  border-radius: 0;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 14px;
 }
 
 .info-block h3 {
