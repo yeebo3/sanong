@@ -202,7 +202,7 @@ function renderHome() {
       <div class="hero-content">
         <p class="eyebrow">三农政策 · 乡村振兴 · 职业画像</p>
         <h1>三农政策的乡村振兴职业画像测试</h1>
-        <p class="lead">通过一组结构化问题，生成适合乡村振兴主题的职业画像，并继续查看画像详情、代表人物与情景模拟。</p>
+        <p class="lead">通过一组结构化问题，判断你在政策理解、产业协作和基层沟通中的优势，生成更贴近乡村振兴场景的职业画像。</p>
         <div class="actions">
           ${buttonLink("开始测试", "#/quiz")}
           ${buttonLink("查看画像详情", "#/profile", "secondary")}
@@ -212,22 +212,22 @@ function renderHome() {
 
     <section class="section alt">
       <div class="container">
-        ${sectionIntro("功能简介", "从答题到情景理解的完整路径", "当前版本保留占位内容和扩展接口，后续可以替换真实题库、画像文本、人物案例和情景素材。")}
+        ${sectionIntro("测试路径", "从个人倾向看到真实工作场景", "页面将答题、画像解读、代表人物和情景模拟串在一起，让结果不只停留在一个称号。")}
         <div class="grid three">
           <article class="card feature-card">
             <div class="feature-icon">01</div>
             <h3>答题生成画像</h3>
-            <p>一页多题、分组展示，适合 PC 和移动端浏览，提交前提示未完成题数。</p>
+            <p>围绕政策判断、项目推进和群众沟通设置问题，快速梳理你的做事偏好。</p>
           </article>
           <article class="card feature-card">
             <div class="feature-icon">02</div>
             <h3>查看代表人物</h3>
-            <p>用人物卡片承载头像、简介、主要经历和对应画像原因，方便后续补充案例。</p>
+            <p>把抽象画像连接到具体岗位和典型经历，帮助你理解角色的真实工作面貌。</p>
           </article>
           <article class="card feature-card">
             <div class="feature-icon">03</div>
             <h3>进入情景模拟</h3>
-            <p>以真实工作情境展开画像反应、优势、不足、建议和现实启发。</p>
+            <p>在农产品滞销、公共空间改造、补贴解释等场景中观察你的处理方式。</p>
           </article>
         </div>
       </div>
@@ -236,7 +236,7 @@ function renderHome() {
     <section class="section">
       <div class="container">
         <div class="notice">
-          页面流程： 首页 → 答题页 → 测试结果页 → 画像详情页 → 代表人物展示 → 情景模拟 → 情景详情页。
+          完成测试后，你可以继续查看画像详情、代表人物和情景模拟，逐步理解自己适合承担的乡村振兴工作角色。
         </div>
       </div>
     </section>
@@ -290,7 +290,7 @@ function renderQuiz() {
       <div class="container">
         <p class="eyebrow">答题页</p>
         <h1>乡村振兴职业画像测试</h1>
-        <p class="lead">请根据你的真实倾向选择。当前题库为框架占位，可在后续阶段替换为正式题目与评分规则。</p>
+        <p class="lead">请根据你的真实倾向选择。每道题没有标准答案，重点是呈现你更自然的判断方式。</p>
       </div>
     </section>
 
@@ -428,7 +428,7 @@ function renderProfileDetail() {
 
     <section class="section alt">
       <div class="container">
-        ${sectionIntro("画像简介", "把政策理解转化为基层行动", "该画像适合作为后续正式内容的展示模板，当前文案用于体现详情页的信息层级和排版方式。")}
+        ${sectionIntro("画像简介", "把政策理解转化为基层行动", "这个画像强调统筹、沟通和执行之间的平衡，适合在复杂的乡村振兴项目中推动共识落地。")}
         <div class="grid three">
           ${profile.traits
             .map(
@@ -446,14 +446,14 @@ function renderProfileDetail() {
 
     <section class="section">
       <div class="container">
-        ${sectionIntro("代表人物", "用于增强画像真实感的案例入口", "每张卡片包含人物图片占位、姓名、简介、主要经历和对应画像原因，后续可以替换为真实案例。")}
+        ${sectionIntro("代表人物", "从相近角色理解画像价值", "下面的角色展示了这种画像在基层项目、农产品运营和乡村治理中的典型工作方式。")}
         <div class="grid three">${renderPeople()}</div>
       </div>
     </section>
 
     <section class="section tint">
       <div class="container">
-        ${sectionIntro("情景模拟", "观察画像在真实工作情境中的表现", "情景卡片保持简洁，详情页再展开背景、行为分析、问题建议和现实启发。")}
+        ${sectionIntro("情景模拟", "观察画像在真实工作情境中的表现", "不同情景会展开背景、行为分析、问题建议和现实启发，帮助你把画像转成行动判断。")}
         <div class="scenario-list">${renderScenarioCards()}</div>
       </div>
     </section>
