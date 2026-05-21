@@ -1,4 +1,5 @@
-const ANSWER_STORAGE_KEY = "quizAnswers";
+const KNOWLEDGE_ANSWER_STORAGE_KEY = "knowledgeQuizAnswers";
+const PERSONA_ANSWER_STORAGE_KEY = "personaQuizAnswers";
 const KNOWLEDGE_COUNT = 10;
 const PERSONA_COUNT = 10;
 
@@ -306,8 +307,10 @@ const profileStories = {
   },
 };
 
-let answers = loadAnswers();
-let activeQuiz = [];
+let knowledgeAnswers = loadKnowledgeAnswers();
+let personaAnswers = loadPersonaAnswers();
+let activeKnowledgeQuiz = [];
+let activePersonaQuiz = [];
 let activeScenarioIndexByProfile = {};
 let activeProfileId = null;
 
@@ -320,70 +323,85 @@ function shuffle(array) {
   return copy;
 }
 
-function buildActiveQuiz() {
-  const knowledgeQuestions = shuffle(knowledgeSource).slice(0, KNOWLEDGE_COUNT).map((item) => ({
+function buildActiveQuizzes() {
+  activeKnowledgeQuiz = shuffle(knowledgeSource).slice(0, KNOWLEDGE_COUNT).map((item, index) => ({
     ...item,
     type: "knowledge",
     quizId: item.id,
     label: "知识题",
+    order: index + 1,
   }));
 
-  const personaQuestions = shuffle(personaSource).slice(0, PERSONA_COUNT).map((item) => ({
+  activePersonaQuiz = shuffle(personaSource).slice(0, PERSONA_COUNT).map((item, index) => ({
     ...item,
     type: "persona",
     quizId: item.id,
     label: "画像题",
-  }));
-
-  activeQuiz = shuffle([...knowledgeQuestions, ...personaQuestions]).map((item, index) => ({
-    ...item,
     order: index + 1,
   }));
 
-  answers = normalizeAnswers(answers);
-  saveAnswers();
+  knowledgeAnswers = normalizeAnswers(knowledgeAnswers, activeKnowledgeQuiz);
+  personaAnswers = normalizeAnswers(personaAnswers, activePersonaQuiz);
+  saveKnowledgeAnswers();
+  savePersonaAnswers();
 }
 
-function loadAnswers() {
+function loadKnowledgeAnswers() {
   try {
-    return JSON.parse(sessionStorage.getItem(ANSWER_STORAGE_KEY) || "{}");
+    return JSON.parse(sessionStorage.getItem(KNOWLEDGE_ANSWER_STORAGE_KEY) || "{}");
   } catch {
-    sessionStorage.removeItem(ANSWER_STORAGE_KEY);
+    sessionStorage.removeItem(KNOWLEDGE_ANSWER_STORAGE_KEY);
     return {};
   }
 }
 
-function saveAnswers() {
-  sessionStorage.setItem(ANSWER_STORAGE_KEY, JSON.stringify(answers));
+function loadPersonaAnswers() {
+  try {
+    return JSON.parse(sessionStorage.getItem(PERSONA_ANSWER_STORAGE_KEY) || "{}");
+  } catch {
+    sessionStorage.removeItem(PERSONA_ANSWER_STORAGE_KEY);
+    return {};
+  }
 }
 
-function normalizeAnswers(value) {
+function saveKnowledgeAnswers() {
+  sessionStorage.setItem(KNOWLEDGE_ANSWER_STORAGE_KEY, JSON.stringify(knowledgeAnswers));
+}
+
+function savePersonaAnswers() {
+  sessionStorage.setItem(PERSONA_ANSWER_STORAGE_KEY, JSON.stringify(personaAnswers));
+}
+
+function normalizeAnswers(value, questions) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return activeQuiz.reduce((safeAnswers, question) => {
+  return questions.reduce((safeAnswers, question) => {
     const answer = value[question.quizId];
     if (question.options[Number(answer) - 1]) safeAnswers[question.quizId] = String(answer);
     return safeAnswers;
   }, {});
 }
 
-function getQuestions() {
-  return activeQuiz;
+function getKnowledgeQuestions() {
+  return activeKnowledgeQuiz;
 }
 
-function answeredCount() {
-  return getQuestions().filter((question) => answers[question.quizId]).length;
+function getPersonaQuestions() {
+  return activePersonaQuiz;
 }
 
-function hasCompletedQuiz() {
-  return answeredCount() === getQuestions().length && getQuestions().length > 0;
+function answeredCount(questions, answersMap) {
+  return questions.filter((question) => answersMap[question.quizId]).length;
 }
 
-function calculateScores() {
+function hasCompletedQuiz(questions, answersMap) {
+  return answeredCount(questions, answersMap) === questions.length && questions.length > 0;
+}
+
+function calculatePersonaScores() {
   const scores = Object.fromEntries(profiles.map((item) => [item.id, 0]));
 
-  getQuestions().forEach((question) => {
-    if (question.type !== "persona") return;
-    const answerIndex = Number(answers[question.quizId]) - 1;
+  getPersonaQuestions().forEach((question) => {
+    const answerIndex = Number(personaAnswers[question.quizId]) - 1;
     if (answerIndex < 0) return;
 
     const optionLetter = question.options[answerIndex]?.[0];
@@ -396,8 +414,8 @@ function calculateScores() {
 }
 
 function getResultProfile() {
-  if (!hasCompletedQuiz()) return null;
-  const scores = calculateScores();
+  if (!hasCompletedQuiz(getPersonaQuestions(), personaAnswers)) return null;
+  const scores = calculatePersonaScores();
   const bestScore = Math.max(...Object.values(scores));
   const tiedProfiles = profiles.filter((item) => scores[item.id] === bestScore);
   return tiedProfiles[0] || profiles[0];
@@ -407,11 +425,18 @@ function getCurrentResultProfile() {
   return getResultProfile();
 }
 
-function resetQuiz() {
-  answers = {};
-  sessionStorage.removeItem(ANSWER_STORAGE_KEY);
-  buildActiveQuiz();
-  setRoute("/quiz");
+function resetKnowledgeQuiz() {
+  knowledgeAnswers = {};
+  sessionStorage.removeItem(KNOWLEDGE_ANSWER_STORAGE_KEY);
+  buildActiveQuizzes();
+  setRoute("/knowledge");
+}
+
+function resetPersonaQuiz() {
+  personaAnswers = {};
+  sessionStorage.removeItem(PERSONA_ANSWER_STORAGE_KEY);
+  buildActiveQuizzes();
+  setRoute("/persona");
 }
 
 function setRoute(path) {
@@ -447,8 +472,8 @@ function renderLockedPage() {
       <div class="container">
         <div class="empty-state">
           <h2>还没有可用结果</h2>
-          <p class="muted">当前已完成 ${answeredCount()} / ${getQuestions().length} 题。</p>
-          <div class="button-row">${buttonLink("继续答题", "#/quiz")}${buttonLink("返回首页", "#/", "secondary")}</div>
+          <p class="muted">当前已完成 ${answeredCount(activeKnowledgeQuiz, knowledgeAnswers)} / ${activeKnowledgeQuiz.length} 题。</p>
+          <div class="button-row">${buttonLink("继续答题", "#/knowledge")}${buttonLink("返回首页", "#/", "secondary")}</div>
         </div>
       </div>
     </section>
@@ -462,32 +487,36 @@ function renderHome() {
         <p class="eyebrow">三农政策 · 乡村振兴 · 职业画像</p>
         <h1>三农政策的乡村振兴职业画像测试</h1>
         <p class="lead">通过测试了解自己更适合承担的乡村振兴角色。</p>
-        <div class="actions">${buttonLink("开始测试", "#/quiz")}${buttonLink("查看测试结果", "#/result", "secondary")}</div>
+        <div class="actions">
+          ${buttonLink("开始知识问答", "#/knowledge")}
+          ${buttonLink("开始职业问答", "#/persona", "secondary")}
+          ${buttonLink("查看测试结果", "#/result", "secondary")}
+        </div>
       </div>
     </section>
   `;
 }
 
-function renderQuiz() {
-  const total = getQuestions().length;
-  const done = answeredCount();
+function renderQuizPage(title, intro, questions, answersMap, submitLabel, submitRoute, showFeedback = false) {
+  const total = questions.length;
+  const done = answeredCount(questions, answersMap);
   const percent = total ? Math.round((done / total) * 100) : 0;
 
-  const groups = getQuestions()
+  const groups = questions
     .map((question) => {
       const options = question.options
         .map((option, optionIndex) => {
           const value = String(optionIndex + 1);
-          const checked = answers[question.quizId] === value ? "checked" : "";
+          const checked = answersMap[question.quizId] === value ? "checked" : "";
           return `<label class="option"><input type="radio" name="${question.quizId}" value="${value}" ${checked} /><span>${option}</span></label>`;
         })
         .join("");
 
-      const answerIndex = Number(answers[question.quizId]) - 1;
+      const answerIndex = Number(answersMap[question.quizId]) - 1;
       const isAnswered = Number.isInteger(answerIndex) && answerIndex >= 0;
       const isCorrect = question.type === "knowledge" ? answerIndex === question.answer : true;
       const feedback =
-        question.type === "knowledge" && isAnswered
+        showFeedback && question.type === "knowledge" && isAnswered
           ? `<p class="answer-feedback ${isCorrect ? "correct" : "wrong"}">${isCorrect ? "回答正确。" : `回答错误，正确答案是 ${question.options[question.answer]}`}${question.explanation ? `。${question.explanation}` : ""}</p>`
           : "";
 
@@ -506,8 +535,8 @@ function renderQuiz() {
     <section class="page-hero">
       <div class="container">
         <p class="eyebrow">答题页</p>
-        <h1>乡村振兴职业画像测试</h1>
-        <p class="lead">前 10 题来自知识题库，后 10 题用于给五种画像加权计分，全部题目会随机混排。</p>
+        <h1>${title}</h1>
+        <p class="lead">${intro}</p>
       </div>
     </section>
 
@@ -524,8 +553,8 @@ function renderQuiz() {
         </div>
         <section class="card question-group">
           <header>
-            <h3>混合题库</h3>
-            <span class="group-index">随机抽题</span>
+            <h3>题目列表</h3>
+            <span class="group-index">${submitLabel}</span>
           </header>
           ${groups}
         </section>
@@ -534,14 +563,30 @@ function renderQuiz() {
 
     <div class="sticky-submit">
       <div class="submit-inner">
-        <p class="muted" id="quizHint">${done === total ? "题目已完成，可以提交测试。" : `还有第 ${getQuestions().filter((question) => !answers[question.quizId]).map((question) => question.order).join("、")} 题未完成`}</p>
+        <p class="muted" id="quizHint">${done === total ? "题目已完成，可以提交测试。" : `还有第 ${questions.filter((question) => !answersMap[question.quizId]).map((question) => question.order).join("、")} 题未完成`}</p>
         <div class="button-row">
           ${buttonLink("返回首页", "#/", "secondary")}
-          <button class="btn" id="submitQuiz" ${done === total ? "" : "disabled"}>提交测试</button>
+          <button class="btn" id="submitQuiz" ${done === total ? "" : "disabled"}>${submitLabel}</button>
         </div>
       </div>
     </div>
   `;
+}
+
+function renderKnowledgeQuiz() {
+  return renderQuizPage("知识问答", "10 题知识问答，答完后可单独提交查看结果。", activeKnowledgeQuiz, knowledgeAnswers, "提交知识问答", "/knowledge-result", false);
+}
+
+function renderKnowledgeResult() {
+  return renderQuizPage("知识问答结果", "以下为知识问答的作答结果与对错反馈。", activeKnowledgeQuiz, knowledgeAnswers, "返回知识问答", "/knowledge", true);
+}
+
+function renderPersonaQuiz() {
+  return renderQuizPage("职业问答", "10 题职业画像问答，答完后可单独提交查看结果。", activePersonaQuiz, personaAnswers, "提交职业问答", "/persona-result", false);
+}
+
+function renderPersonaResult() {
+  return renderResult();
 }
 
 function renderResult() {
@@ -782,8 +827,14 @@ function syncNav(path) {
 function bindQuizEvents() {
   document.querySelectorAll(".option input").forEach((input) => {
     input.addEventListener("change", (event) => {
-      answers[event.target.name] = event.target.value;
-      saveAnswers();
+      const path = window.location.hash.replace("#", "") || "/";
+      if (path === "/knowledge" || path === "/knowledge-result") {
+        knowledgeAnswers[event.target.name] = event.target.value;
+        saveKnowledgeAnswers();
+      } else if (path === "/persona" || path === "/persona-result") {
+        personaAnswers[event.target.name] = event.target.value;
+        savePersonaAnswers();
+      }
       render({ preserveScroll: true });
     });
   });
@@ -791,8 +842,12 @@ function bindQuizEvents() {
   const submit = document.getElementById("submitQuiz");
   if (submit) {
     submit.addEventListener("click", () => {
-      const unanswered = getQuestions()
-        .filter((question) => !answers[question.quizId])
+      const path = window.location.hash.replace("#", "") || "/";
+      const isKnowledge = path === "/knowledge" || path === "/knowledge-result";
+      const questions = isKnowledge ? activeKnowledgeQuiz : activePersonaQuiz;
+      const answersMap = isKnowledge ? knowledgeAnswers : personaAnswers;
+      const unanswered = questions
+        .filter((question) => !answersMap[question.quizId])
         .map((question) => question.order);
 
       if (unanswered.length > 0) {
@@ -800,14 +855,26 @@ function bindQuizEvents() {
         return;
       }
 
-      setRoute("/result");
+      if (path === "/knowledge") setRoute("/knowledge-result");
+      else if (path === "/persona") setRoute("/persona-result");
+      else if (path === "/knowledge-result") setRoute("/knowledge");
+      else if (path === "/persona-result") setRoute("/persona");
     });
   }
 }
 
 function bindPageActions() {
   document.querySelectorAll("[data-action='reset-quiz']").forEach((button) => {
-    button.addEventListener("click", resetQuiz);
+    button.addEventListener("click", () => {
+      const path = window.location.hash.replace("#", "") || "/";
+      if (path === "/knowledge" || path === "/knowledge-result") {
+        resetKnowledgeQuiz();
+      } else if (path === "/persona" || path === "/persona-result") {
+        resetPersonaQuiz();
+      } else {
+        setRoute("/");
+      }
+    });
   });
 
   document.querySelectorAll("[data-action='open-profile']").forEach((button) => {
@@ -827,6 +894,10 @@ function bindPageActions() {
       render({ preserveScroll: true });
     });
   });
+
+  document.querySelectorAll("[data-route]").forEach((button) => {
+    button.addEventListener("click", () => setRoute(button.dataset.route));
+  });
 }
 
 function render(options = {}) {
@@ -835,10 +906,13 @@ function render(options = {}) {
   const preserveScroll = options.preserveScroll === true;
   const scrollY = window.scrollY;
 
-  if (activeQuiz.length === 0) buildActiveQuiz();
+  if (activeKnowledgeQuiz.length === 0 || activePersonaQuiz.length === 0) buildActiveQuizzes();
 
   if (path === "/") app.innerHTML = renderHome();
-  else if (path === "/quiz") app.innerHTML = renderQuiz();
+  else if (path === "/knowledge") app.innerHTML = renderKnowledgeQuiz();
+  else if (path === "/persona") app.innerHTML = renderPersonaQuiz();
+  else if (path === "/knowledge-result") app.innerHTML = renderKnowledgeResult();
+  else if (path === "/persona-result") app.innerHTML = renderPersonaResult();
   else if (path === "/result") app.innerHTML = renderResult();
   else if (path === "/profile") app.innerHTML = renderProfileDetail();
   else app.innerHTML = renderHome();
@@ -850,6 +924,6 @@ function render(options = {}) {
   window.scrollTo({ top: preserveScroll ? scrollY : 0, behavior: "auto" });
 }
 
-buildActiveQuiz();
+buildActiveQuizzes();
 window.addEventListener("hashchange", render);
 window.addEventListener("DOMContentLoaded", render);
