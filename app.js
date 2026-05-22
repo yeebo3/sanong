@@ -313,6 +313,7 @@ let activeKnowledgeQuiz = [];
 let activePersonaQuiz = [];
 let activeScenarioIndexByProfile = {};
 let activeProfileId = null;
+let activeIncidentDialog = null;
 
 function shuffle(array) {
   const copy = [...array];
@@ -459,6 +460,68 @@ function sectionIntro(eyebrow, title, text) {
   `;
 }
 
+function renderIncidentDialog() {
+  if (!activeIncidentDialog) return "";
+
+  const profile = profiles.find((item) => item.id === activeIncidentDialog.profileId);
+  const story = profileStories[activeIncidentDialog.profileId];
+  const scenario = story?.scenes?.[activeIncidentDialog.scenarioIndex] || story?.scenes?.[0];
+  if (!profile || !scenario) return "";
+
+  const selectedChoice = Number.isInteger(activeIncidentDialog.choiceIndex)
+    ? scenario.choices[activeIncidentDialog.choiceIndex]
+    : null;
+  const choices = scenario.choices
+    .map((choice, index) => {
+      const isSelected = activeIncidentDialog.choiceIndex === index;
+      return `
+        <button
+          class="incident-choice ${isSelected ? "is-selected" : ""}"
+          type="button"
+          data-incident-choice="${index}"
+          aria-pressed="${isSelected}"
+        >
+          <span class="choice-badge">${String.fromCharCode(65 + index)}</span>
+          <span>${choice.label}</span>
+        </button>
+      `;
+    })
+    .join("");
+
+  const outcome = selectedChoice
+    ? `
+      <div class="incident-outcome-grid">
+        <div>
+          <p class="incident-outcome-label">结局</p>
+          <p>${selectedChoice.result}</p>
+        </div>
+        <div>
+          <p class="incident-outcome-label">获得成就</p>
+          <p>${selectedChoice.achievement}</p>
+        </div>
+      </div>
+    `
+    : `<p class="incident-placeholder">请选择一个应对方案，查看它带来的结局与成就。</p>`;
+
+  return `
+    <div class="incident-backdrop" data-action="close-incident" role="presentation">
+      <section class="incident-dialog" role="dialog" aria-modal="true" aria-labelledby="incidentTitle" aria-describedby="incidentIntro">
+        <button class="incident-close" type="button" data-action="close-incident" aria-label="关闭突发状况">×</button>
+        <p class="incident-alert">突发状况</p>
+        <p class="incident-profile">${profile.name}</p>
+        <h2 id="incidentTitle">${scenario.title}</h2>
+        <p class="incident-intro" id="incidentIntro">${scenario.intro}</p>
+        <div class="incident-options" aria-label="突发状况应对选项">
+          ${choices}
+        </div>
+        <div class="incident-result" aria-live="polite">
+          ${outcome}
+        </div>
+      </section>
+    </div>
+  `;
+}
+
 function renderLockedPage() {
   return `
     <section class="page-hero">
@@ -595,27 +658,17 @@ function renderResult() {
   activeProfileId = resultProfile.id;
   const scenarioIndex = activeScenarioIndexByProfile[resultProfile.id] ?? 0;
   const scenario = profileStories[resultProfile.id]?.scenes?.[scenarioIndex];
-  const scenarioCount = profileStories[resultProfile.id]?.scenes?.length || 0;
-  const choiceGroups = scenario
-    ? scenario.choices
-        .map(
-          (choice, index) => `
-            <article class="scenario-choice card">
-              <div class="scenario-choice-head">
-                <span class="choice-badge">${String.fromCharCode(65 + index)}</span>
-                <div>
-                  <h3>${choice.label}</h3>
-                  <p class="muted">情景选项</p>
-                </div>
-              </div>
-              <div class="scenario-outcome">
-                <p><strong>结果：</strong>${choice.result}</p>
-                <p><strong>成就：</strong>${choice.achievement}</p>
-              </div>
-            </article>
-          `,
-        )
-        .join("")
+  const incidentEntry = scenario
+    ? `
+      <article class="incident-entry">
+        <div>
+          <p class="trait-kicker">情境中的突发状况</p>
+          <h3>${scenario.title}</h3>
+          <p>${scenario.intro}</p>
+        </div>
+        <button class="btn warn" type="button" data-action="open-incident" data-profile-id="${resultProfile.id}" data-scenario-index="${scenarioIndex}">触发突发状况</button>
+      </article>
+    `
     : "";
 
   return `
@@ -661,6 +714,8 @@ function renderResult() {
               .join("")}
           </div>
 
+          ${incidentEntry}
+
           <div class="button-row result-actions">
             <button class="btn" data-action="open-profile">查看详情</button>
             <button class="btn secondary" data-action="reset-quiz">重新测试</button>
@@ -675,31 +730,11 @@ function renderProfileDetail() {
   const resultProfile = getResultProfile();
   if (!resultProfile) return renderLockedPage();
 
+  activeProfileId = resultProfile.id;
   const story = profileStories[resultProfile.id];
   const scenarioIndex = activeScenarioIndexByProfile[resultProfile.id] ?? 0;
   const scenario = story?.scenes?.[scenarioIndex];
   const scenarioCount = story?.scenes?.length || 0;
-  const choiceGroups = scenario
-    ? scenario.choices
-        .map(
-          (choice, index) => `
-            <article class="scenario-choice card">
-              <div class="scenario-choice-head">
-                <span class="choice-badge">${String.fromCharCode(65 + index)}</span>
-                <div>
-                  <h3>${choice.label}</h3>
-                  <p class="muted">情景选项</p>
-                </div>
-              </div>
-              <div class="scenario-outcome">
-                <p><strong>结果：</strong>${choice.result}</p>
-                <p><strong>成就：</strong>${choice.achievement}</p>
-              </div>
-            </article>
-          `,
-        )
-        .join("")
-    : "";
 
   return `
     <section class="page-hero">
@@ -773,9 +808,14 @@ function renderProfileDetail() {
             <div class="intro-panel scenario-intro">
               <p>${scenario?.intro || story.intro}</p>
             </div>
-            <div class="scenario-card-grid">
-              ${choiceGroups}
-            </div>
+            <article class="scenario-trigger-panel">
+              <div>
+                <p class="trait-kicker">即时应对</p>
+                <h3>点击触发这个突发状况</h3>
+                <p>弹窗会给出可选处理方案。选择后，将展示对应的结局和成就。</p>
+              </div>
+              <button class="btn warn" type="button" data-action="open-incident" data-profile-id="${resultProfile.id}" data-scenario-index="${scenarioIndex}">触发突发状况</button>
+            </article>
           </div>
         </div>
       </div>
@@ -881,6 +921,34 @@ function bindPageActions() {
     button.addEventListener("click", () => setRoute("/profile"));
   });
 
+  document.querySelectorAll("[data-action='open-incident']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const profileId = button.dataset.profileId || activeProfileId;
+      const scenarioIndex = Number(button.dataset.scenarioIndex || 0);
+      activeIncidentDialog = { profileId, scenarioIndex, choiceIndex: null };
+      render({ preserveScroll: true });
+    });
+  });
+
+  document.querySelectorAll("[data-action='close-incident']").forEach((element) => {
+    element.addEventListener("click", (event) => {
+      if (element.classList.contains("incident-backdrop") && event.target !== element) return;
+      activeIncidentDialog = null;
+      render({ preserveScroll: true });
+    });
+  });
+
+  document.querySelectorAll("[data-incident-choice]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!activeIncidentDialog) return;
+      activeIncidentDialog = {
+        ...activeIncidentDialog,
+        choiceIndex: Number(button.dataset.incidentChoice),
+      };
+      render({ preserveScroll: true });
+    });
+  });
+
   document.querySelectorAll("[data-scenario-nav]").forEach((button) => {
     button.addEventListener("click", () => {
       if (!activeProfileId) return;
@@ -907,6 +975,7 @@ function render(options = {}) {
   const scrollY = window.scrollY;
 
   if (activeKnowledgeQuiz.length === 0 || activePersonaQuiz.length === 0) buildActiveQuizzes();
+  if (path !== "/result" && path !== "/profile") activeIncidentDialog = null;
 
   if (path === "/") app.innerHTML = renderHome();
   else if (path === "/knowledge") app.innerHTML = renderKnowledgeQuiz();
@@ -917,6 +986,7 @@ function render(options = {}) {
   else if (path === "/profile") app.innerHTML = renderProfileDetail();
   else app.innerHTML = renderHome();
 
+  app.innerHTML += renderIncidentDialog();
   bindQuizEvents();
   bindPageActions();
   syncNav(path);
@@ -925,5 +995,11 @@ function render(options = {}) {
 }
 
 buildActiveQuizzes();
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && activeIncidentDialog) {
+    activeIncidentDialog = null;
+    render({ preserveScroll: true });
+  }
+});
 window.addEventListener("hashchange", render);
 window.addEventListener("DOMContentLoaded", render);
