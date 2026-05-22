@@ -398,6 +398,11 @@ function hasCompletedQuiz(questions, answersMap) {
   return answeredCount(questions, answersMap) === questions.length && questions.length > 0;
 }
 
+function hasCompletedAllQuizzes() {
+  return hasCompletedQuiz(getKnowledgeQuestions(), knowledgeAnswers)
+    && hasCompletedQuiz(getPersonaQuestions(), personaAnswers);
+}
+
 function calculatePersonaScores() {
   const scores = Object.fromEntries(profiles.map((item) => [item.id, 0]));
 
@@ -415,7 +420,7 @@ function calculatePersonaScores() {
 }
 
 function getResultProfile() {
-  if (!hasCompletedQuiz(getPersonaQuestions(), personaAnswers)) return null;
+  if (!hasCompletedAllQuizzes()) return null;
   const scores = calculatePersonaScores();
   const bestScore = Math.max(...Object.values(scores));
   const tiedProfiles = profiles.filter((item) => scores[item.id] === bestScore);
@@ -523,20 +528,28 @@ function renderIncidentDialog() {
 }
 
 function renderLockedPage() {
+  const knowledgeDone = answeredCount(activeKnowledgeQuiz, knowledgeAnswers);
+  const personaDone = answeredCount(activePersonaQuiz, personaAnswers);
+  const actions = [
+    !hasCompletedQuiz(activeKnowledgeQuiz, knowledgeAnswers) ? buttonLink("继续知识问答", "#/knowledge") : "",
+    !hasCompletedQuiz(activePersonaQuiz, personaAnswers) ? buttonLink("继续职业问答", "#/persona") : "",
+    buttonLink("返回首页", "#/", "secondary"),
+  ].join("");
+
   return `
     <section class="page-hero">
       <div class="container">
         <p class="eyebrow">流程提示</p>
-        <h1>请先完成职业画像测试</h1>
-        <p class="lead">完成全部 20 题后，再进入后续页面。</p>
+        <h1>请先完成两部分测试</h1>
+        <p class="lead">完成知识问答和职业问答后，再进入测试结果页。</p>
       </div>
     </section>
     <section class="section alt">
       <div class="container">
         <div class="empty-state">
           <h2>还没有可用结果</h2>
-          <p class="muted">当前已完成 ${answeredCount(activeKnowledgeQuiz, knowledgeAnswers)} / ${activeKnowledgeQuiz.length} 题。</p>
-          <div class="button-row">${buttonLink("继续答题", "#/knowledge")}${buttonLink("返回首页", "#/", "secondary")}</div>
+          <p class="muted">当前已完成：知识问答 ${knowledgeDone} / ${activeKnowledgeQuiz.length} 题，职业问答 ${personaDone} / ${activePersonaQuiz.length} 题。</p>
+          <div class="button-row">${actions}</div>
         </div>
       </div>
     </section>
@@ -560,10 +573,25 @@ function renderHome() {
   `;
 }
 
-function renderQuizPage(title, intro, questions, answersMap, submitLabel, submitRoute, showFeedback = false) {
+function getPostSubmitAction(currentType) {
+  if (currentType === "knowledge" && !hasCompletedQuiz(getPersonaQuestions(), personaAnswers)) {
+    return { label: "继续职业问答", route: "/persona" };
+  }
+
+  if (currentType === "persona" && !hasCompletedQuiz(getKnowledgeQuestions(), knowledgeAnswers)) {
+    return { label: "继续知识问答", route: "/knowledge" };
+  }
+
+  return { label: "进入测试结果", route: "/result" };
+}
+
+function renderQuizPage(title, intro, questions, answersMap, submitLabel, submitRoute, showFeedback = false, isSubmittedView = false) {
   const total = questions.length;
   const done = answeredCount(questions, answersMap);
   const percent = total ? Math.round((done / total) * 100) : 0;
+  const hint = isSubmittedView
+    ? (submitRoute === "/result" ? "两部分测试已完成，可以查看测试结果。" : "当前部分已提交，请继续完成另一部分测试。")
+    : (done === total ? "题目已完成，可以提交测试。" : `还有第 ${questions.filter((question) => !answersMap[question.quizId]).map((question) => question.order).join("、")} 题未完成`);
 
   const groups = questions
     .map((question) => {
@@ -580,7 +608,7 @@ function renderQuizPage(title, intro, questions, answersMap, submitLabel, submit
       const isCorrect = question.type === "knowledge" ? answerIndex === question.answer : true;
       const feedback =
         showFeedback && question.type === "knowledge" && isAnswered
-          ? `<p class="answer-feedback ${isCorrect ? "correct" : "wrong"}">${isCorrect ? "回答正确。" : `回答错误，正确答案是 ${question.options[question.answer]}`}${question.explanation ? `。${question.explanation}` : ""}</p>`
+          ? `<p class="answer-feedback ${isCorrect ? "correct" : "wrong"}">${isCorrect ? "回答正确" : `回答错误，正确答案是 ${question.options[question.answer]}`}${question.explanation ? `。${question.explanation}` : "。"}</p>`
           : "";
 
       return `
@@ -617,7 +645,7 @@ function renderQuizPage(title, intro, questions, answersMap, submitLabel, submit
         <section class="card question-group">
           <header>
             <h3>题目列表</h3>
-            <span class="group-index">${submitLabel}</span>
+            <button class="btn group-submit" type="button" data-action="submit-quiz" data-submit-route="${submitRoute}" ${done === total ? "" : "disabled"}>${submitLabel}</button>
           </header>
           ${groups}
         </section>
@@ -626,10 +654,10 @@ function renderQuizPage(title, intro, questions, answersMap, submitLabel, submit
 
     <div class="sticky-submit">
       <div class="submit-inner">
-        <p class="muted" id="quizHint">${done === total ? "题目已完成，可以提交测试。" : `还有第 ${questions.filter((question) => !answersMap[question.quizId]).map((question) => question.order).join("、")} 题未完成`}</p>
+        <p class="muted" id="quizHint">${hint}</p>
         <div class="button-row">
           ${buttonLink("返回首页", "#/", "secondary")}
-          <button class="btn" id="submitQuiz" ${done === total ? "" : "disabled"}>${submitLabel}</button>
+          <button class="btn" type="button" data-action="submit-quiz" data-submit-route="${submitRoute}" ${done === total ? "" : "disabled"}>${submitLabel}</button>
         </div>
       </div>
     </div>
@@ -641,7 +669,8 @@ function renderKnowledgeQuiz() {
 }
 
 function renderKnowledgeResult() {
-  return renderQuizPage("知识问答结果", "以下为知识问答的作答结果与对错反馈。", activeKnowledgeQuiz, knowledgeAnswers, "返回知识问答", "/knowledge", true);
+  const nextAction = getPostSubmitAction("knowledge");
+  return renderQuizPage("知识问答已提交", "以下为知识问答的作答结果与对错反馈。", activeKnowledgeQuiz, knowledgeAnswers, nextAction.label, nextAction.route, true, true);
 }
 
 function renderPersonaQuiz() {
@@ -649,7 +678,8 @@ function renderPersonaQuiz() {
 }
 
 function renderPersonaResult() {
-  return renderResult();
+  const nextAction = getPostSubmitAction("persona");
+  return renderQuizPage("职业问答已提交", "职业画像问答已完成。继续完成另一部分测试后，即可生成最终画像结果。", activePersonaQuiz, personaAnswers, nextAction.label, nextAction.route, false, true);
 }
 
 function renderResult() {
@@ -698,6 +728,9 @@ function renderResult() {
           <div class="tag-list">
             ${resultProfile.tags.map((tag) => `<span class="tag">${tag}</span>`).join("")}
           </div>
+          <div class="result-primary-actions">
+            <button class="btn result-primary-btn" data-action="open-profile">查看详情</button>
+          </div>
         </article>
 
         <div class="result-content">
@@ -717,7 +750,6 @@ function renderResult() {
           ${incidentEntry}
 
           <div class="button-row result-actions">
-            <button class="btn" data-action="open-profile">查看详情</button>
             <button class="btn secondary" data-action="reset-quiz">重新测试</button>
           </div>
         </div>
@@ -879,8 +911,7 @@ function bindQuizEvents() {
     });
   });
 
-  const submit = document.getElementById("submitQuiz");
-  if (submit) {
+  document.querySelectorAll("[data-action='submit-quiz']").forEach((submit) => {
     submit.addEventListener("click", () => {
       const path = window.location.hash.replace("#", "") || "/";
       const isKnowledge = path === "/knowledge" || path === "/knowledge-result";
@@ -895,12 +926,9 @@ function bindQuizEvents() {
         return;
       }
 
-      if (path === "/knowledge") setRoute("/knowledge-result");
-      else if (path === "/persona") setRoute("/persona-result");
-      else if (path === "/knowledge-result") setRoute("/knowledge");
-      else if (path === "/persona-result") setRoute("/persona");
+      setRoute(submit.dataset.submitRoute);
     });
-  }
+  });
 }
 
 function bindPageActions() {

@@ -592,14 +592,10 @@ p {
   border-bottom: 2px solid rgba(40, 105, 76, 0.22);
 }
 
-.group-index {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 0;
-  color: var(--green-dark);
+.group-submit {
+  min-height: 38px;
+  padding: 8px 14px;
   font-size: 13px;
-  font-weight: 800;
   white-space: nowrap;
 }
 
@@ -782,6 +778,16 @@ p {
 
 .result-block-3 {
   border-left-color: rgba(184, 121, 37, 0.46);
+}
+
+.result-primary-actions {
+  display: grid;
+  margin-top: 2px;
+}
+
+.result-primary-btn {
+  width: 100%;
+  min-height: 52px;
 }
 
 .result-actions {
