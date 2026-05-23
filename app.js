@@ -772,18 +772,6 @@ function renderQuizAside(type, questions, answersMap, currentQuestion, currentIn
     `;
   }
 
-  const profileRows = profiles
-    .map((profile) => `
-      <div class="quiz-persona-preview">
-        <img src="${profile.avatar}" alt="${profile.name}" />
-        <div>
-          <strong>${profile.name}</strong>
-          <span>${profile.tags.slice(0, 2).join(" / ")}</span>
-        </div>
-      </div>
-    `)
-    .join("");
-
   return `
     <aside class="quiz-side-panel" aria-label="职业画像状态">
       <p class="quiz-side-kicker">当前阶段</p>
@@ -792,9 +780,6 @@ function renderQuizAside(type, questions, answersMap, currentQuestion, currentIn
       <div class="quiz-side-note">
         <span>当前选择</span>
         <strong>${currentSelection}</strong>
-      </div>
-      <div class="quiz-persona-list" aria-label="画像预览">
-        ${profileRows}
       </div>
     </aside>
   `;
