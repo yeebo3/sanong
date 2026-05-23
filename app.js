@@ -313,7 +313,9 @@ let activeKnowledgeQuiz = [];
 let activePersonaQuiz = [];
 let activeScenarioIndexByProfile = {};
 let activeProfileId = null;
+let activeCaseIndex = null;
 let activeIncidentDialog = null;
+let incidentGateCompletedByProfile = {};
 
 function shuffle(array) {
   const copy = [...array];
@@ -324,7 +326,7 @@ function shuffle(array) {
   return copy;
 }
 
-function buildActiveQuizzes() {
+function buildActiveKnowledgeQuiz() {
   activeKnowledgeQuiz = shuffle(knowledgeSource).slice(0, KNOWLEDGE_COUNT).map((item, index) => ({
     ...item,
     type: "knowledge",
@@ -333,6 +335,11 @@ function buildActiveQuizzes() {
     order: index + 1,
   }));
 
+  knowledgeAnswers = normalizeAnswers(knowledgeAnswers, activeKnowledgeQuiz);
+  saveKnowledgeAnswers();
+}
+
+function buildActivePersonaQuiz() {
   activePersonaQuiz = shuffle(personaSource).slice(0, PERSONA_COUNT).map((item, index) => ({
     ...item,
     type: "persona",
@@ -341,10 +348,13 @@ function buildActiveQuizzes() {
     order: index + 1,
   }));
 
-  knowledgeAnswers = normalizeAnswers(knowledgeAnswers, activeKnowledgeQuiz);
   personaAnswers = normalizeAnswers(personaAnswers, activePersonaQuiz);
-  saveKnowledgeAnswers();
   savePersonaAnswers();
+}
+
+function buildActiveQuizzes() {
+  buildActiveKnowledgeQuiz();
+  buildActivePersonaQuiz();
 }
 
 function loadKnowledgeAnswers() {
@@ -390,6 +400,10 @@ function getPersonaQuestions() {
   return activePersonaQuiz;
 }
 
+function getProfileById(profileId) {
+  return profiles.find((item) => item.id === profileId);
+}
+
 function answeredCount(questions, answersMap) {
   return questions.filter((question) => answersMap[question.quizId]).length;
 }
@@ -398,9 +412,31 @@ function hasCompletedQuiz(questions, answersMap) {
   return answeredCount(questions, answersMap) === questions.length && questions.length > 0;
 }
 
-function hasCompletedAllQuizzes() {
-  return hasCompletedQuiz(getKnowledgeQuestions(), knowledgeAnswers)
-    && hasCompletedQuiz(getPersonaQuestions(), personaAnswers);
+function hasCompletedPersonaQuiz() {
+  return hasCompletedQuiz(getPersonaQuestions(), personaAnswers);
+}
+
+function getKnowledgeStats(questions = getKnowledgeQuestions(), answersMap = knowledgeAnswers) {
+  const rows = questions.map((question) => {
+    const answerIndex = Number(answersMap[question.quizId]) - 1;
+    const isAnswered = Number.isInteger(answerIndex) && answerIndex >= 0;
+    const isCorrect = isAnswered && answerIndex === question.answer;
+    return {
+      question,
+      answerIndex,
+      isAnswered,
+      isCorrect,
+      selectedOption: isAnswered ? question.options[answerIndex] : "未作答",
+      correctOption: question.options[question.answer],
+    };
+  });
+
+  return {
+    total: rows.length,
+    correct: rows.filter((row) => row.isCorrect).length,
+    wrong: rows.filter((row) => row.isAnswered && !row.isCorrect).length,
+    rows,
+  };
 }
 
 function calculatePersonaScores() {
@@ -413,14 +449,15 @@ function calculatePersonaScores() {
     const optionLetter = question.options[answerIndex]?.[0];
     if (!optionLetter || scores[optionLetter] === undefined) return;
 
-    scores[optionLetter] += 1;
+    const weightedScore = Number(question.weights?.[optionLetter]) || 1;
+    scores[optionLetter] += weightedScore;
   });
 
   return scores;
 }
 
 function getResultProfile() {
-  if (!hasCompletedAllQuizzes()) return null;
+  if (!hasCompletedPersonaQuiz()) return null;
   const scores = calculatePersonaScores();
   const bestScore = Math.max(...Object.values(scores));
   const tiedProfiles = profiles.filter((item) => scores[item.id] === bestScore);
@@ -434,14 +471,18 @@ function getCurrentResultProfile() {
 function resetKnowledgeQuiz() {
   knowledgeAnswers = {};
   sessionStorage.removeItem(KNOWLEDGE_ANSWER_STORAGE_KEY);
-  buildActiveQuizzes();
+  buildActiveKnowledgeQuiz();
   setRoute("/knowledge");
 }
 
 function resetPersonaQuiz() {
   personaAnswers = {};
   sessionStorage.removeItem(PERSONA_ANSWER_STORAGE_KEY);
-  buildActiveQuizzes();
+  activeProfileId = null;
+  activeCaseIndex = null;
+  activeIncidentDialog = null;
+  incidentGateCompletedByProfile = {};
+  buildActivePersonaQuiz();
   setRoute("/persona");
 }
 
@@ -465,10 +506,43 @@ function sectionIntro(eyebrow, title, text) {
   `;
 }
 
+function buildIncidentProgression(profile, scenario, choice) {
+  return [
+    `你选择“${choice.label}”后，团队首先围绕“${scenario.title}”快速统一行动口径，明确由谁判断风险、谁沟通资源、谁负责落地。`,
+    `随着处理推进，${profile.name}的能力倾向被进一步放大：${choice.result}，这让现场局势进入新的阶段。`,
+  ];
+}
+
+function canCloseIncidentDialog() {
+  return Number.isInteger(activeIncidentDialog?.choiceIndex);
+}
+
+function openIncidentDialog(profileId, scenarioIndex = 0) {
+  activeScenarioIndexByProfile[profileId] = scenarioIndex;
+  activeIncidentDialog = { profileId, scenarioIndex, choiceIndex: null };
+}
+
+function ensureForcedIncident(profileId) {
+  if (!profileId || incidentGateCompletedByProfile[profileId] || activeIncidentDialog) return;
+  const scenarioIndex = activeScenarioIndexByProfile[profileId] ?? 0;
+  openIncidentDialog(profileId, scenarioIndex);
+}
+
+function renderBlackoutEffect() {
+  return `
+    <div class="blackout-effect" aria-hidden="true">
+      <span class="firework firework-one"></span>
+      <span class="firework firework-two"></span>
+      <span class="firework firework-three"></span>
+      <span class="surprise-text">结局揭晓</span>
+    </div>
+  `;
+}
+
 function renderIncidentDialog() {
   if (!activeIncidentDialog) return "";
 
-  const profile = profiles.find((item) => item.id === activeIncidentDialog.profileId);
+  const profile = getProfileById(activeIncidentDialog.profileId);
   const story = profileStories[activeIncidentDialog.profileId];
   const scenario = story?.scenes?.[activeIncidentDialog.scenarioIndex] || story?.scenes?.[0];
   if (!profile || !scenario) return "";
@@ -494,7 +568,19 @@ function renderIncidentDialog() {
     .join("");
 
   const outcome = selectedChoice
-    ? `
+    ? (() => {
+      const progression = buildIncidentProgression(profile, scenario, selectedChoice);
+      return `
+      <div class="incident-development">
+        <article>
+          <p class="incident-outcome-label">情景发展 1</p>
+          <p>${progression[0]}</p>
+        </article>
+        <article>
+          <p class="incident-outcome-label">情景发展 2</p>
+          <p>${progression[1]}</p>
+        </article>
+      </div>
       <div class="incident-outcome-grid">
         <div>
           <p class="incident-outcome-label">结局</p>
@@ -505,14 +591,22 @@ function renderIncidentDialog() {
           <p>${selectedChoice.achievement}</p>
         </div>
       </div>
-    `
+      <div class="incident-finish-row">
+        <button class="btn" type="button" data-action="close-incident">完成并关闭</button>
+      </div>
+    `;
+    })()
     : `<p class="incident-placeholder">请选择一个应对方案，查看它带来的结局与成就。</p>`;
 
   return `
-    <div class="incident-backdrop" data-action="close-incident" role="presentation">
+    ${selectedChoice ? renderBlackoutEffect() : ""}
+    <div class="incident-backdrop" role="presentation">
       <section class="incident-dialog" role="dialog" aria-modal="true" aria-labelledby="incidentTitle" aria-describedby="incidentIntro">
-        <button class="incident-close" type="button" data-action="close-incident" aria-label="关闭突发状况">×</button>
-        <p class="incident-alert">突发状况</p>
+        ${canCloseIncidentDialog() ? `<button class="incident-close" type="button" data-action="close-incident" aria-label="关闭突发状况">×</button>` : ""}
+        <div class="incident-topline">
+          <p class="incident-alert">强制突发状况</p>
+          <button class="incident-refresh" type="button" data-action="refresh-incident">刷新状况</button>
+        </div>
         <p class="incident-profile">${profile.name}</p>
         <h2 id="incidentTitle">${scenario.title}</h2>
         <p class="incident-intro" id="incidentIntro">${scenario.intro}</p>
@@ -531,8 +625,8 @@ function renderLockedPage() {
   const knowledgeDone = answeredCount(activeKnowledgeQuiz, knowledgeAnswers);
   const personaDone = answeredCount(activePersonaQuiz, personaAnswers);
   const actions = [
-    !hasCompletedQuiz(activeKnowledgeQuiz, knowledgeAnswers) ? buttonLink("继续知识问答", "#/knowledge") : "",
     !hasCompletedQuiz(activePersonaQuiz, personaAnswers) ? buttonLink("继续职业问答", "#/persona") : "",
+    buttonLink("进入知识问答", "#/knowledge", "secondary"),
     buttonLink("返回首页", "#/", "secondary"),
   ].join("");
 
@@ -540,15 +634,15 @@ function renderLockedPage() {
     <section class="page-hero">
       <div class="container">
         <p class="eyebrow">流程提示</p>
-        <h1>请先完成两部分测试</h1>
-        <p class="lead">完成知识问答和职业问答后，再进入测试结果页。</p>
+        <h1>请先完成职业测试</h1>
+        <p class="lead">职业测试会生成画像结果；知识问答可单独提交查看对错，不影响画像生成。</p>
       </div>
     </section>
     <section class="section alt">
       <div class="container">
         <div class="empty-state">
           <h2>还没有可用结果</h2>
-          <p class="muted">当前已完成：知识问答 ${knowledgeDone} / ${activeKnowledgeQuiz.length} 题，职业问答 ${personaDone} / ${activePersonaQuiz.length} 题。</p>
+          <p class="muted">当前已完成：职业问答 ${personaDone} / ${activePersonaQuiz.length} 题。知识问答进度 ${knowledgeDone} / ${activeKnowledgeQuiz.length} 题。</p>
           <div class="button-row">${actions}</div>
         </div>
       </div>
@@ -564,9 +658,8 @@ function renderHome() {
         <h1>三农政策的乡村振兴职业画像测试</h1>
         <p class="lead">通过测试了解自己更适合承担的乡村振兴角色。</p>
         <div class="actions">
-          ${buttonLink("开始知识问答", "#/knowledge")}
-          ${buttonLink("开始职业问答", "#/persona", "secondary")}
-          ${buttonLink("查看测试结果", "#/result", "secondary")}
+          ${buttonLink("开始职业测试", "#/persona")}
+          ${buttonLink("开始知识问答", "#/knowledge", "secondary")}
         </div>
       </div>
     </section>
@@ -574,23 +667,30 @@ function renderHome() {
 }
 
 function getPostSubmitAction(currentType) {
-  if (currentType === "knowledge" && !hasCompletedQuiz(getPersonaQuestions(), personaAnswers)) {
-    return { label: "继续职业问答", route: "/persona" };
-  }
-
-  if (currentType === "persona" && !hasCompletedQuiz(getKnowledgeQuestions(), knowledgeAnswers)) {
-    return { label: "继续知识问答", route: "/knowledge" };
+  if (currentType === "knowledge") {
+    return { label: "查看全部题目", route: "/knowledge-bank" };
   }
 
   return { label: "进入测试结果", route: "/result" };
 }
 
-function renderQuizPage(title, intro, questions, answersMap, submitLabel, submitRoute, showFeedback = false, isSubmittedView = false) {
+function renderQuizPage(
+  title,
+  intro,
+  questions,
+  answersMap,
+  submitLabel,
+  submitRoute,
+  showFeedback = false,
+  isSubmittedView = false,
+  extraContent = "",
+  extraActions = "",
+) {
   const total = questions.length;
   const done = answeredCount(questions, answersMap);
   const percent = total ? Math.round((done / total) * 100) : 0;
   const hint = isSubmittedView
-    ? (submitRoute === "/result" ? "两部分测试已完成，可以查看测试结果。" : "当前部分已提交，请继续完成另一部分测试。")
+    ? (submitRoute === "/result" ? "职业测试已完成，可以查看测试结果。" : "知识问答已提交，可以查看全部题库或重新答题。")
     : (done === total ? "题目已完成，可以提交测试。" : `还有第 ${questions.filter((question) => !answersMap[question.quizId]).map((question) => question.order).join("、")} 题未完成`);
 
   const groups = questions
@@ -599,20 +699,32 @@ function renderQuizPage(title, intro, questions, answersMap, submitLabel, submit
         .map((option, optionIndex) => {
           const value = String(optionIndex + 1);
           const checked = answersMap[question.quizId] === value ? "checked" : "";
-          return `<label class="option"><input type="radio" name="${question.quizId}" value="${value}" ${checked} /><span>${option}</span></label>`;
+          const isKnowledgeFeedback = showFeedback && question.type === "knowledge";
+          const answerIndex = Number(answersMap[question.quizId]) - 1;
+          const isSelected = answerIndex === optionIndex;
+          const isCorrectOption = optionIndex === question.answer;
+          const feedbackClass = isKnowledgeFeedback && isCorrectOption
+            ? "is-correct-option"
+            : isKnowledgeFeedback && isSelected && !isCorrectOption
+              ? "is-wrong-option"
+              : "";
+          return `<label class="option ${feedbackClass}"><input type="radio" name="${question.quizId}" value="${value}" ${checked} /><span>${option}</span></label>`;
         })
         .join("");
 
       const answerIndex = Number(answersMap[question.quizId]) - 1;
       const isAnswered = Number.isInteger(answerIndex) && answerIndex >= 0;
       const isCorrect = question.type === "knowledge" ? answerIndex === question.answer : true;
+      const questionClass = showFeedback && question.type === "knowledge"
+        ? (isCorrect ? "is-correct-question" : "is-wrong-question")
+        : "";
       const feedback =
         showFeedback && question.type === "knowledge" && isAnswered
           ? `<p class="answer-feedback ${isCorrect ? "correct" : "wrong"}">${isCorrect ? "回答正确" : `回答错误，正确答案是 ${question.options[question.answer]}`}${question.explanation ? `。${question.explanation}` : "。"}</p>`
           : "";
 
       return `
-        <div class="question">
+        <div class="question ${questionClass}">
           <p class="question-title">${question.order}. ${question.question}</p>
           <div class="question-meta">${question.label}</div>
           <div class="options">${options}</div>
@@ -645,8 +757,12 @@ function renderQuizPage(title, intro, questions, answersMap, submitLabel, submit
         <section class="card question-group">
           <header>
             <h3>题目列表</h3>
-            <button class="btn group-submit" type="button" data-action="submit-quiz" data-submit-route="${submitRoute}" ${done === total ? "" : "disabled"}>${submitLabel}</button>
+            <div class="quiz-header-actions">
+              ${extraActions}
+              <button class="btn group-submit" type="button" data-action="submit-quiz" data-submit-route="${submitRoute}" ${done === total ? "" : "disabled"}>${submitLabel}</button>
+            </div>
           </header>
+          ${extraContent}
           ${groups}
         </section>
       </div>
@@ -657,6 +773,7 @@ function renderQuizPage(title, intro, questions, answersMap, submitLabel, submit
         <p class="muted" id="quizHint">${hint}</p>
         <div class="button-row">
           ${buttonLink("返回首页", "#/", "secondary")}
+          ${extraActions}
           <button class="btn" type="button" data-action="submit-quiz" data-submit-route="${submitRoute}" ${done === total ? "" : "disabled"}>${submitLabel}</button>
         </div>
       </div>
@@ -664,13 +781,131 @@ function renderQuizPage(title, intro, questions, answersMap, submitLabel, submit
   `;
 }
 
+function renderKnowledgeSubmitSummary() {
+  const stats = getKnowledgeStats();
+  const wrongRows = stats.rows.filter((row) => row.isAnswered && !row.isCorrect);
+
+  const wrongList = wrongRows.length
+    ? `
+      <div class="mistake-list">
+        ${wrongRows
+          .map(
+            (row, index) => `
+              <article class="mistake-item">
+                <p class="mistake-index">错题 ${index + 1}</p>
+                <h3>${row.question.order}. ${row.question.question}</h3>
+                <p><strong>你的答案：</strong>${row.selectedOption}</p>
+                <p><strong>正确答案：</strong>${row.correctOption}</p>
+                <p><strong>详解：</strong>${row.question.explanation || "暂无详解。"}</p>
+              </article>
+            `,
+          )
+          .join("")}
+      </div>
+    `
+    : `<p class="all-correct">本次知识问答全部答对，可以继续查看完整题库复习。</p>`;
+
+  return `
+    <section class="knowledge-summary" aria-label="知识问答结果汇总">
+      <div class="knowledge-score-card correct">
+        <span>${stats.correct}</span>
+        <p>答对题数</p>
+      </div>
+      <div class="knowledge-score-card wrong">
+        <span>${stats.wrong}</span>
+        <p>答错题数</p>
+      </div>
+      <div class="knowledge-score-card total">
+        <span>${stats.total}</span>
+        <p>本次题数</p>
+      </div>
+      <div class="mistake-summary">
+        <h3>错题汇总</h3>
+        ${wrongList}
+      </div>
+    </section>
+  `;
+}
+
+function renderKnowledgeBank() {
+  const questions = knowledgeSource.map((question, index) => ({
+    ...question,
+    type: "knowledge",
+    quizId: question.id,
+    label: "题库题",
+    order: index + 1,
+  }));
+
+  const items = questions
+    .map(
+      (question) => `
+        <article class="bank-question">
+          <p class="question-meta">${question.label}</p>
+          <h3>${question.order}. ${question.question}</h3>
+          <div class="bank-options">
+            ${question.options
+              .map(
+                (option, index) => `
+                  <span class="bank-option ${index === question.answer ? "is-answer" : ""}">${option}</span>
+                `,
+              )
+              .join("")}
+          </div>
+          <p class="bank-explanation"><strong>详解：</strong>${question.explanation || "暂无详解。"}</p>
+        </article>
+      `,
+    )
+    .join("");
+
+  return `
+    <section class="page-hero">
+      <div class="container">
+        <p class="eyebrow">知识题库</p>
+        <h1>全部题目</h1>
+        <p class="lead">这里汇总当前题库中的所有题目、正确答案和详解，便于集中复习。</p>
+        <div class="button-row">
+          ${buttonLink("返回知识问答", "#/knowledge", "secondary")}
+          ${buttonLink("查看本次结果", "#/knowledge-result", "secondary")}
+        </div>
+      </div>
+    </section>
+    <section class="section alt">
+      <div class="container bank-list">
+        ${items}
+      </div>
+    </section>
+  `;
+}
+
 function renderKnowledgeQuiz() {
-  return renderQuizPage("知识问答", "10 题知识问答，答完后可单独提交查看结果。", activeKnowledgeQuiz, knowledgeAnswers, "提交知识问答", "/knowledge-result", false);
+  return renderQuizPage(
+    "知识问答",
+    "10 题知识问答，答完后可单独提交查看结果。",
+    activeKnowledgeQuiz,
+    knowledgeAnswers,
+    "提交知识问答",
+    "/knowledge-result",
+    false,
+    false,
+    "",
+    buttonLink("所有题目", "#/knowledge-bank", "secondary"),
+  );
 }
 
 function renderKnowledgeResult() {
   const nextAction = getPostSubmitAction("knowledge");
-  return renderQuizPage("知识问答已提交", "以下为知识问答的作答结果与对错反馈。", activeKnowledgeQuiz, knowledgeAnswers, nextAction.label, nextAction.route, true, true);
+  return renderQuizPage(
+    "知识问答已提交",
+    "以下为知识问答的作答结果、错题汇总与逐题详解。",
+    activeKnowledgeQuiz,
+    knowledgeAnswers,
+    nextAction.label,
+    nextAction.route,
+    true,
+    true,
+    renderKnowledgeSubmitSummary(),
+    `<button class="btn secondary" type="button" data-action="reset-quiz">重新答题</button>`,
+  );
 }
 
 function renderPersonaQuiz() {
@@ -679,27 +914,75 @@ function renderPersonaQuiz() {
 
 function renderPersonaResult() {
   const nextAction = getPostSubmitAction("persona");
-  return renderQuizPage("职业问答已提交", "职业画像问答已完成。继续完成另一部分测试后，即可生成最终画像结果。", activePersonaQuiz, personaAnswers, nextAction.label, nextAction.route, false, true);
+  return renderQuizPage("职业问答已提交", "职业画像问答已完成，可以进入最终画像结果。", activePersonaQuiz, personaAnswers, nextAction.label, nextAction.route, false, true);
+}
+
+function getPersonaAnswerAnalysis(resultProfile) {
+  return getPersonaQuestions().map((question) => {
+    const answerIndex = Number(personaAnswers[question.quizId]) - 1;
+    const selectedOption = question.options[answerIndex] || "";
+    const selectedProfileId = selectedOption[0];
+    const selectedProfile = getProfileById(selectedProfileId);
+    const isCoreMatch = selectedProfileId === resultProfile.id;
+    return {
+      question,
+      selectedOption,
+      selectedProfile,
+      isCoreMatch,
+      analysis: isCoreMatch
+        ? `这道题的选择直接指向“${resultProfile.name}”，说明你在这个场景里更倾向于用该画像的方式判断和行动。`
+        : selectedProfile
+          ? `这道题体现了“${selectedProfile.name}”的局部倾向，它与最终画像共同构成你的复合能力结构。`
+          : "这道题体现了你的综合判断倾向。",
+    };
+  });
+}
+
+function renderPersonaScoreBars(scores, activeProfileIdForResult) {
+  const maxScore = Math.max(...Object.values(scores), 1);
+  return profiles
+    .map((profile) => {
+      const score = scores[profile.id] || 0;
+      const width = Math.max(4, Math.round((score / maxScore) * 100));
+      return `
+        <div class="score-row ${profile.id === activeProfileIdForResult ? "is-active" : ""}">
+          <span>${profile.name}</span>
+          <div class="score-track"><i style="width: ${width}%"></i></div>
+          <strong>${score.toFixed(1)}</strong>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function renderPersonaChoiceAnalysis(resultProfile) {
+  const analysisRows = getPersonaAnswerAnalysis(resultProfile);
+  const coreMatches = analysisRows.filter((row) => row.isCoreMatch);
+  const displayedRows = [
+    ...coreMatches.slice(0, 4),
+    ...analysisRows.filter((row) => !row.isCoreMatch).slice(0, Math.max(0, 4 - coreMatches.length)),
+  ];
+
+  return displayedRows
+    .map(
+      (row) => `
+        <article class="choice-analysis-item ${row.isCoreMatch ? "is-core" : ""}">
+          <p class="choice-analysis-question">${row.question.order}. ${row.question.question}</p>
+          <p class="choice-analysis-answer">${row.selectedOption}</p>
+          <p>${row.analysis}</p>
+        </article>
+      `,
+    )
+    .join("");
 }
 
 function renderResult() {
   const resultProfile = getResultProfile();
   if (!resultProfile) return renderLockedPage();
   activeProfileId = resultProfile.id;
-  const scenarioIndex = activeScenarioIndexByProfile[resultProfile.id] ?? 0;
-  const scenario = profileStories[resultProfile.id]?.scenes?.[scenarioIndex];
-  const incidentEntry = scenario
-    ? `
-      <article class="incident-entry">
-        <div>
-          <p class="trait-kicker">情境中的突发状况</p>
-          <h3>${scenario.title}</h3>
-          <p>${scenario.intro}</p>
-        </div>
-        <button class="btn warn" type="button" data-action="open-incident" data-profile-id="${resultProfile.id}" data-scenario-index="${scenarioIndex}">触发突发状况</button>
-      </article>
-    `
-    : "";
+  const story = profileStories[resultProfile.id];
+  const scores = calculatePersonaScores();
+  const topChoices = renderPersonaChoiceAnalysis(resultProfile);
 
   return `
     <section class="page-hero">
@@ -711,50 +994,100 @@ function renderResult() {
     </section>
 
     <section class="section alt">
-      <div class="container result-layout">
-        <article class="card profile-card result-summary-card">
-          <div class="profile-visual" aria-hidden="true">画像</div>
-          <div>
+      <div class="container result-simple-layout">
+        <aside class="result-photo-panel">
+          <img src="${story?.image || "image/beijing.png"}" alt="${resultProfile.name}" />
+          <div class="result-photo-caption">
+            <p class="eyebrow">你的职业画像</p>
             <h2>${resultProfile.name}</h2>
-            <p class="muted">${resultProfile.summary}</p>
+            <p>${resultProfile.motto}</p>
           </div>
-          <article class="result-lead-block">
-            <p class="result-lead-kicker">核心画像</p>
-            <div>
-              <h3>${resultProfile.name}的核心画像</h3>
-              <p>${resultProfile.summary}</p>
-            </div>
-          </article>
-          <div class="tag-list">
+        </aside>
+
+        <article class="result-analysis-panel">
+          <p class="eyebrow">答题分析</p>
+          <h2>你的选择更接近“${resultProfile.name}”</h2>
+          <p class="result-analysis-lead">${resultProfile.summary}</p>
+
+          <div class="score-board" aria-label="职业画像得分">
+            ${renderPersonaScoreBars(scores, resultProfile.id)}
+          </div>
+
+          <div class="choice-analysis-list">
+            ${topChoices}
+          </div>
+
+          <div class="tag-list result-tag-list">
             ${resultProfile.tags.map((tag) => `<span class="tag">${tag}</span>`).join("")}
           </div>
-          <div class="result-primary-actions">
-            <button class="btn result-primary-btn" data-action="open-profile">查看详情</button>
-          </div>
-        </article>
-
-        <div class="result-content">
-          <div class="result-grid">
-            ${resultProfile.traits
-              .map(
-                (item, index) => `
-                  <article class="info-block result-block-${(index % 3) + 1}">
-                    <h3>${item.title}</h3>
-                    <p>${item.text}</p>
-                  </article>
-                `,
-              )
-              .join("")}
-          </div>
-
-          ${incidentEntry}
 
           <div class="button-row result-actions">
+            <button class="btn" data-action="open-profile">查看详情</button>
             <button class="btn secondary" data-action="reset-quiz">重新测试</button>
           </div>
-        </div>
+        </article>
       </div>
     </section>
+  `;
+}
+
+function getCaseVideoUrl(story) {
+  const keyword = story?.caseTitle || "乡村振兴 人物 介绍";
+  return `https://search.bilibili.com/all?keyword=${encodeURIComponent(keyword)}`;
+}
+
+function renderCaseStackCarousel(resultProfileId) {
+  const initialIndex = profiles.findIndex((profile) => profile.id === resultProfileId);
+  if (activeCaseIndex === null) activeCaseIndex = Math.max(0, initialIndex);
+
+  const total = profiles.length;
+  const activeProfile = profiles[activeCaseIndex] || profiles[0];
+  const cards = profiles
+    .map((profile, index) => {
+      const story = profileStories[profile.id];
+      if (!story) return "";
+      const relative = (index - activeCaseIndex + total) % total;
+      const stackClass = relative === 0
+        ? "is-active"
+        : relative === 1
+          ? "is-next"
+          : relative === total - 1
+            ? "is-prev"
+            : "is-hidden";
+
+      return `
+        <article class="case-stack-card ${stackClass}" aria-hidden="${relative === 0 ? "false" : "true"}">
+          <a class="case-image-link" href="${getCaseVideoUrl(story)}" target="_blank" rel="noopener noreferrer" tabindex="${relative === 0 ? "0" : "-1"}" aria-label="打开${story.caseTitle}的视频介绍">
+            <img src="${story.image}" alt="${story.caseTitle}" />
+            <span>视频介绍</span>
+          </a>
+          <div class="case-stack-copy">
+            <p class="trait-kicker">${profile.name}</p>
+            <h3>${story.caseTitle}</h3>
+            <p>${story.caseText}</p>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
+  return `
+    <div class="case-stack-shell">
+      <div class="case-stack-head">
+        <div>
+          <p class="eyebrow">人物案例</p>
+          <h2>${activeProfile ? activeProfile.name : "人物介绍"}</h2>
+        </div>
+        <div class="case-stack-controls">
+          <button class="btn secondary" type="button" data-case-nav="prev">上一位</button>
+          <span>${activeCaseIndex + 1} / ${total}</span>
+          <button class="btn secondary" type="button" data-case-nav="next">下一位</button>
+        </div>
+      </div>
+      <div class="case-stack-viewport">
+        ${cards}
+      </div>
+    </div>
   `;
 }
 
@@ -855,33 +1188,7 @@ function renderProfileDetail() {
 
     <section class="section tint">
       <div class="container">
-        <div class="section-heading-only">
-          <p class="eyebrow">人物案例</p>
-          <h2>${story.caseTitle}</h2>
-        </div>
-        <article class="case-panel card">
-          <div class="case-top">
-            <div class="case-image" aria-hidden="true">
-              <img src="${story.image}" alt="${story.caseTitle}" />
-            </div>
-            <div class="case-summary">
-              <div class="case-quote">“${resultProfile.motto}”</div>
-              <p>${resultProfile.summary}</p>
-              <p style="margin-top: 12px;">这类人物通常不是只停留在观点表达，而是会把能力放进真实场景里，通过持续行动把价值做出来。</p>
-            </div>
-          </div>
-          <div class="case-columns">
-            <div class="case-bio">
-              <h3>人物经历</h3>
-              <p>${story.caseText}</p>
-            </div>
-            <div class="case-bio">
-              <h3>案例启发</h3>
-              <p>${resultProfile.summary}</p>
-              <p style="margin-top: 12px;">结合画像特征来看，这类人物往往更重视方向判断、行动路径和实际成果，能够把个人能力转化成乡村振兴中的真实贡献。</p>
-            </div>
-          </div>
-        </article>
+        ${renderCaseStackCarousel(resultProfile.id)}
       </div>
     </section>
     ` : ""}
@@ -891,7 +1198,9 @@ function renderProfileDetail() {
 function syncNav(path) {
   document.querySelectorAll(".nav-links a").forEach((link) => {
     const href = link.getAttribute("href");
-    const active = href === `#${path}` || (href === "#/result" && (path === "/profile" || path === "/result"));
+    const active = href === `#${path}`
+      || (href === "#/persona" && (path === "/persona-result" || path === "/result" || path === "/profile"))
+      || (href === "#/knowledge" && (path === "/knowledge-result" || path === "/knowledge-bank"));
     link.classList.toggle("is-active", active);
   });
 }
@@ -939,6 +1248,8 @@ function bindPageActions() {
         resetKnowledgeQuiz();
       } else if (path === "/persona" || path === "/persona-result") {
         resetPersonaQuiz();
+      } else if (path === "/result" || path === "/profile") {
+        resetPersonaQuiz();
       } else {
         setRoute("/");
       }
@@ -953,15 +1264,28 @@ function bindPageActions() {
     button.addEventListener("click", () => {
       const profileId = button.dataset.profileId || activeProfileId;
       const scenarioIndex = Number(button.dataset.scenarioIndex || 0);
-      activeIncidentDialog = { profileId, scenarioIndex, choiceIndex: null };
+      openIncidentDialog(profileId, scenarioIndex);
       render({ preserveScroll: true });
     });
   });
 
   document.querySelectorAll("[data-action='close-incident']").forEach((element) => {
-    element.addEventListener("click", (event) => {
-      if (element.classList.contains("incident-backdrop") && event.target !== element) return;
+    element.addEventListener("click", () => {
+      if (!canCloseIncidentDialog()) return;
+      incidentGateCompletedByProfile[activeIncidentDialog.profileId] = true;
       activeIncidentDialog = null;
+      render({ preserveScroll: true });
+    });
+  });
+
+  document.querySelectorAll("[data-action='refresh-incident']").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!activeIncidentDialog) return;
+      const profileId = activeIncidentDialog.profileId;
+      const scenes = profileStories[profileId]?.scenes || [];
+      if (!scenes.length) return;
+      const nextIndex = (activeIncidentDialog.scenarioIndex + 1) % scenes.length;
+      openIncidentDialog(profileId, nextIndex);
       render({ preserveScroll: true });
     });
   });
@@ -991,6 +1315,17 @@ function bindPageActions() {
     });
   });
 
+  document.querySelectorAll("[data-case-nav]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const total = profiles.length;
+      const current = activeCaseIndex ?? 0;
+      activeCaseIndex = button.dataset.caseNav === "next"
+        ? (current + 1) % total
+        : (current - 1 + total) % total;
+      render({ preserveScroll: true });
+    });
+  });
+
   document.querySelectorAll("[data-route]").forEach((button) => {
     button.addEventListener("click", () => setRoute(button.dataset.route));
   });
@@ -1002,16 +1337,21 @@ function render(options = {}) {
   const preserveScroll = options.preserveScroll === true;
   const scrollY = window.scrollY;
 
-  if (activeKnowledgeQuiz.length === 0 || activePersonaQuiz.length === 0) buildActiveQuizzes();
+  if (activeKnowledgeQuiz.length === 0) buildActiveKnowledgeQuiz();
+  if (activePersonaQuiz.length === 0) buildActivePersonaQuiz();
   if (path !== "/result" && path !== "/profile") activeIncidentDialog = null;
 
   if (path === "/") app.innerHTML = renderHome();
   else if (path === "/knowledge") app.innerHTML = renderKnowledgeQuiz();
   else if (path === "/persona") app.innerHTML = renderPersonaQuiz();
+  else if (path === "/knowledge-bank") app.innerHTML = renderKnowledgeBank();
   else if (path === "/knowledge-result") app.innerHTML = renderKnowledgeResult();
   else if (path === "/persona-result") app.innerHTML = renderPersonaResult();
   else if (path === "/result") app.innerHTML = renderResult();
-  else if (path === "/profile") app.innerHTML = renderProfileDetail();
+  else if (path === "/profile") {
+    app.innerHTML = renderProfileDetail();
+    ensureForcedIncident(activeProfileId);
+  }
   else app.innerHTML = renderHome();
 
   app.innerHTML += renderIncidentDialog();
@@ -1024,7 +1364,8 @@ function render(options = {}) {
 
 buildActiveQuizzes();
 window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && activeIncidentDialog) {
+  if (event.key === "Escape" && activeIncidentDialog && canCloseIncidentDialog()) {
+    incidentGateCompletedByProfile[activeIncidentDialog.profileId] = true;
     activeIncidentDialog = null;
     render({ preserveScroll: true });
   }
