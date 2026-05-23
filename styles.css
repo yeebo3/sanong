@@ -161,7 +161,8 @@ input {
   color: #fff;
   background:
     linear-gradient(90deg, rgba(17, 43, 30, 0.8), rgba(17, 43, 30, 0.34)),
-    url("data/image/beijing.png") center / cover;
+    url("https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1800&q=80")
+      center / cover;
 }
 
 .hero-content {
