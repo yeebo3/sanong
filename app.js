@@ -1,5 +1,7 @@
 const KNOWLEDGE_ANSWER_STORAGE_KEY = "knowledgeQuizAnswers";
 const PERSONA_ANSWER_STORAGE_KEY = "personaQuizAnswers";
+const KNOWLEDGE_QUIZ_IDS_STORAGE_KEY = "knowledgeQuizQuestionIds";
+const PERSONA_QUIZ_IDS_STORAGE_KEY = "personaQuizQuestionIds";
 const KNOWLEDGE_COUNT = 10;
 const PERSONA_COUNT = 10;
 
@@ -261,11 +263,17 @@ let knowledgeAnswers = loadKnowledgeAnswers();
 let personaAnswers = loadPersonaAnswers();
 let activeKnowledgeQuiz = [];
 let activePersonaQuiz = [];
+let activeQuizIndexByType = { knowledge: 0, persona: 0 };
 let activeScenarioIndexByProfile = {};
 let activeProfileId = null;
 let activeCaseIndex = null;
 let activeIncidentDialog = null;
 let incidentGateCompletedByProfile = {};
+
+const quizStages = {
+  knowledge: ["政策基础", "关键概念", "实践判断", "集中复盘"],
+  persona: ["观察乡村", "判断路径", "选择行动", "生成画像"],
+};
 
 function shuffle(array) {
   const copy = [...array];
@@ -276,28 +284,74 @@ function shuffle(array) {
   return copy;
 }
 
-function buildActiveKnowledgeQuiz() {
-  activeKnowledgeQuiz = shuffle(knowledgeSource).slice(0, KNOWLEDGE_COUNT).map((item, index) => ({
+function clampQuizIndex(index, total) {
+  if (total <= 0) return 0;
+  const safeIndex = Number.isInteger(index) ? index : 0;
+  return Math.min(Math.max(safeIndex, 0), total - 1);
+}
+
+function loadQuizIds(storageKey) {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(storageKey) || "[]");
+    return Array.isArray(value) ? value.filter((id) => typeof id === "string") : [];
+  } catch {
+    sessionStorage.removeItem(storageKey);
+    return [];
+  }
+}
+
+function saveQuizIds(storageKey, questions) {
+  sessionStorage.setItem(storageKey, JSON.stringify(questions.map((question) => question.id)));
+}
+
+function buildQuizFromSource(source, count, type, label, storageKey) {
+  const targetCount = Math.min(count, source.length);
+  const sourceById = new Map(source.map((item) => [item.id, item]));
+  const storedIds = loadQuizIds(storageKey);
+  const storedQuestions = storedIds.map((id) => sourceById.get(id)).filter(Boolean);
+  const hasStoredOrder =
+    storedIds.length === targetCount &&
+    storedQuestions.length === targetCount &&
+    new Set(storedIds).size === targetCount;
+  const selectedQuestions = hasStoredOrder
+    ? storedQuestions
+    : shuffle(source).slice(0, targetCount);
+  const questions = selectedQuestions.map((item, index) => ({
     ...item,
-    type: "knowledge",
+    type,
     quizId: item.id,
-    label: "知识题",
+    label,
     order: index + 1,
   }));
 
+  saveQuizIds(storageKey, questions);
+  return questions;
+}
+
+function buildActiveKnowledgeQuiz() {
+  activeKnowledgeQuiz = buildQuizFromSource(
+    knowledgeSource,
+    KNOWLEDGE_COUNT,
+    "knowledge",
+    "知识题",
+    KNOWLEDGE_QUIZ_IDS_STORAGE_KEY,
+  );
+
+  activeQuizIndexByType.knowledge = clampQuizIndex(activeQuizIndexByType.knowledge, activeKnowledgeQuiz.length);
   knowledgeAnswers = normalizeAnswers(knowledgeAnswers, activeKnowledgeQuiz);
   saveKnowledgeAnswers();
 }
 
 function buildActivePersonaQuiz() {
-  activePersonaQuiz = shuffle(personaSource).slice(0, PERSONA_COUNT).map((item, index) => ({
-    ...item,
-    type: "persona",
-    quizId: item.id,
-    label: "画像题",
-    order: index + 1,
-  }));
+  activePersonaQuiz = buildQuizFromSource(
+    personaSource,
+    PERSONA_COUNT,
+    "persona",
+    "画像题",
+    PERSONA_QUIZ_IDS_STORAGE_KEY,
+  );
 
+  activeQuizIndexByType.persona = clampQuizIndex(activeQuizIndexByType.persona, activePersonaQuiz.length);
   personaAnswers = normalizeAnswers(personaAnswers, activePersonaQuiz);
   savePersonaAnswers();
 }
@@ -421,6 +475,8 @@ function getCurrentResultProfile() {
 function resetKnowledgeQuiz() {
   knowledgeAnswers = {};
   sessionStorage.removeItem(KNOWLEDGE_ANSWER_STORAGE_KEY);
+  sessionStorage.removeItem(KNOWLEDGE_QUIZ_IDS_STORAGE_KEY);
+  activeQuizIndexByType.knowledge = 0;
   buildActiveKnowledgeQuiz();
   setRoute("/knowledge");
 }
@@ -428,6 +484,8 @@ function resetKnowledgeQuiz() {
 function resetPersonaQuiz() {
   personaAnswers = {};
   sessionStorage.removeItem(PERSONA_ANSWER_STORAGE_KEY);
+  sessionStorage.removeItem(PERSONA_QUIZ_IDS_STORAGE_KEY);
+  activeQuizIndexByType.persona = 0;
   activeProfileId = null;
   activeCaseIndex = null;
   activeIncidentDialog = null;
@@ -624,6 +682,124 @@ function getPostSubmitAction(currentType) {
   return { label: "进入测试结果", route: "/result" };
 }
 
+function getQuizTypeFromPath(path) {
+  if (path === "/knowledge" || path === "/knowledge-result") return "knowledge";
+  if (path === "/persona" || path === "/persona-result") return "persona";
+  return null;
+}
+
+function getQuizStage(type, index, total) {
+  const stages = quizStages[type] || quizStages.persona;
+  if (total <= 1) return stages[0];
+  const stageIndex = Math.min(stages.length - 1, Math.floor((index / (total - 1)) * stages.length));
+  return stages[stageIndex];
+}
+
+function getOptionParts(option, optionIndex) {
+  const match = String(option).match(/^([A-Z])\.\s*(.+)$/);
+  return {
+    badge: match ? match[1] : String.fromCharCode(65 + optionIndex),
+    text: match ? match[2] : option,
+  };
+}
+
+function renderQuizStepper(questions, answersMap, currentIndex, showFeedback) {
+  return questions
+    .map((question, index) => {
+      const answerIndex = Number(answersMap[question.quizId]) - 1;
+      const isAnswered = Number.isInteger(answerIndex) && answerIndex >= 0;
+      const isCorrect = question.type === "knowledge" && showFeedback && isAnswered && answerIndex === question.answer;
+      const isWrong = question.type === "knowledge" && showFeedback && isAnswered && answerIndex !== question.answer;
+      const stateClass = [
+        index === currentIndex ? "is-current" : "",
+        isAnswered ? "is-answered" : "",
+        isCorrect ? "is-correct-step" : "",
+        isWrong ? "is-wrong-step" : "",
+      ].filter(Boolean).join(" ");
+
+      return `
+        <button
+          class="quiz-step ${stateClass}"
+          type="button"
+          data-action="go-question"
+          data-question-index="${index}"
+          aria-label="跳转到第 ${question.order} 题"
+          aria-current="${index === currentIndex ? "step" : "false"}"
+        >
+          ${question.order}
+        </button>
+      `;
+    })
+    .join("");
+}
+
+function renderQuizAside(type, questions, answersMap, currentQuestion, currentIndex, showFeedback) {
+  const total = questions.length;
+  const done = answeredCount(questions, answersMap);
+  const stage = getQuizStage(type, currentIndex, total);
+  const currentAnswerIndex = Number(answersMap[currentQuestion.quizId]) - 1;
+  const currentSelection = currentQuestion.options[currentAnswerIndex] || "尚未选择";
+  const statBlock = type === "knowledge" && showFeedback
+    ? (() => {
+      const stats = getKnowledgeStats(questions, answersMap);
+      return `
+        <div class="quiz-stat-grid">
+          <div><strong>${stats.correct}</strong><span>答对</span></div>
+          <div><strong>${stats.wrong}</strong><span>答错</span></div>
+          <div><strong>${stats.total}</strong><span>总题</span></div>
+        </div>
+      `;
+    })()
+    : `
+      <div class="quiz-stat-grid">
+        <div><strong>${done}</strong><span>已答</span></div>
+        <div><strong>${Math.max(total - done, 0)}</strong><span>未答</span></div>
+        <div><strong>${Math.round((done / total) * 100) || 0}%</strong><span>进度</span></div>
+      </div>
+    `;
+
+  if (type === "knowledge") {
+    return `
+      <aside class="quiz-side-panel" aria-label="知识问答状态">
+        <p class="quiz-side-kicker">当前阶段</p>
+        <h3>${stage}</h3>
+        ${statBlock}
+        <div class="quiz-side-note">
+          <span>当前选择</span>
+          <strong>${currentSelection}</strong>
+        </div>
+      </aside>
+    `;
+  }
+
+  const profileRows = profiles
+    .map((profile) => `
+      <div class="quiz-persona-preview">
+        <img src="${profile.avatar}" alt="${profile.name}" />
+        <div>
+          <strong>${profile.name}</strong>
+          <span>${profile.tags.slice(0, 2).join(" / ")}</span>
+        </div>
+      </div>
+    `)
+    .join("");
+
+  return `
+    <aside class="quiz-side-panel" aria-label="职业画像状态">
+      <p class="quiz-side-kicker">当前阶段</p>
+      <h3>${stage}</h3>
+      ${statBlock}
+      <div class="quiz-side-note">
+        <span>当前选择</span>
+        <strong>${currentSelection}</strong>
+      </div>
+      <div class="quiz-persona-list" aria-label="画像预览">
+        ${profileRows}
+      </div>
+    </aside>
+  `;
+}
+
 function renderQuizPage(
   title,
   intro,
@@ -638,83 +814,114 @@ function renderQuizPage(
 ) {
   const total = questions.length;
   const done = answeredCount(questions, answersMap);
+  const quizType = questions[0]?.type || "persona";
+  const currentIndex = clampQuizIndex(activeQuizIndexByType[quizType], total);
+  activeQuizIndexByType[quizType] = currentIndex;
+  const currentQuestion = questions[currentIndex];
   const percent = total ? Math.round((done / total) * 100) : 0;
+  const currentAnswerIndex = currentQuestion ? Number(answersMap[currentQuestion.quizId]) - 1 : -1;
+  const currentAnswered = Number.isInteger(currentAnswerIndex) && currentAnswerIndex >= 0;
   const hint = isSubmittedView
     ? (submitRoute === "/result" ? "职业测试已完成，可以查看测试结果。" : "知识问答已提交，可以查看全部题库或重新答题。")
-    : (done === total ? "题目已完成，可以提交测试。" : `还有第 ${questions.filter((question) => !answersMap[question.quizId]).map((question) => question.order).join("、")} 题未完成`);
+    : currentAnswered
+      ? (done === total ? "题目已完成，可以提交测试。" : "本题已记录，可以继续下一题。")
+      : "当前题还未作答。";
 
-  const groups = questions
-    .map((question) => {
-      const options = question.options
-        .map((option, optionIndex) => {
-          const value = String(optionIndex + 1);
-          const checked = answersMap[question.quizId] === value ? "checked" : "";
-          const isKnowledgeFeedback = showFeedback && question.type === "knowledge";
-          const answerIndex = Number(answersMap[question.quizId]) - 1;
-          const isSelected = answerIndex === optionIndex;
-          const isCorrectOption = optionIndex === question.answer;
-          const feedbackClass = isKnowledgeFeedback && isCorrectOption
-            ? "is-correct-option"
-            : isKnowledgeFeedback && isSelected && !isCorrectOption
-              ? "is-wrong-option"
-              : "";
-          return `<label class="option ${feedbackClass}"><input type="radio" name="${question.quizId}" value="${value}" ${checked} /><span>${option}</span></label>`;
-        })
-        .join("");
+  if (!currentQuestion) {
+    return `
+      <section class="page-hero quiz-hero">
+        <div class="container">
+          <p class="eyebrow">答题页</p>
+          <h1>${title}</h1>
+          <p class="lead">当前没有可用题目。</p>
+        </div>
+      </section>
+    `;
+  }
 
-      const answerIndex = Number(answersMap[question.quizId]) - 1;
-      const isAnswered = Number.isInteger(answerIndex) && answerIndex >= 0;
-      const isCorrect = question.type === "knowledge" ? answerIndex === question.answer : true;
-      const questionClass = showFeedback && question.type === "knowledge"
-        ? (isCorrect ? "is-correct-question" : "is-wrong-question")
-        : "";
-      const feedback =
-        showFeedback && question.type === "knowledge" && isAnswered
-          ? `<p class="answer-feedback ${isCorrect ? "correct" : "wrong"}">${isCorrect ? "回答正确" : `回答错误，正确答案是 ${question.options[question.answer]}`}${question.explanation ? `。${question.explanation}` : "。"}</p>`
+  const options = currentQuestion.options
+    .map((option, optionIndex) => {
+      const value = String(optionIndex + 1);
+      const checked = answersMap[currentQuestion.quizId] === value ? "checked" : "";
+      const disabled = isSubmittedView ? "disabled" : "";
+      const isKnowledgeFeedback = showFeedback && currentQuestion.type === "knowledge";
+      const isSelected = currentAnswerIndex === optionIndex;
+      const isCorrectOption = optionIndex === currentQuestion.answer;
+      const feedbackClass = isKnowledgeFeedback && isCorrectOption
+        ? "is-correct-option"
+        : isKnowledgeFeedback && isSelected && !isCorrectOption
+          ? "is-wrong-option"
           : "";
+      const optionParts = getOptionParts(option, optionIndex);
 
       return `
-        <div class="question ${questionClass}">
-          <p class="question-title">${question.order}. ${question.question}</p>
-          <div class="question-meta">${question.label}</div>
-          <div class="options">${options}</div>
-          ${feedback}
-        </div>
+        <label class="option ${isSelected ? "is-selected" : ""} ${feedbackClass}">
+          <input type="radio" name="${currentQuestion.quizId}" value="${value}" ${checked} ${disabled} />
+          <span class="option-badge">${optionParts.badge}</span>
+          <span class="option-copy">${optionParts.text}</span>
+        </label>
       `;
     })
     .join("");
+  const isCorrect = currentQuestion.type === "knowledge" ? currentAnswerIndex === currentQuestion.answer : true;
+  const questionClass = showFeedback && currentQuestion.type === "knowledge"
+    ? (isCorrect ? "is-correct-question" : "is-wrong-question")
+    : "";
+  const feedback =
+    showFeedback && currentQuestion.type === "knowledge" && currentAnswered
+      ? `<p class="answer-feedback ${isCorrect ? "correct" : "wrong"}">${isCorrect ? "回答正确" : `回答错误，正确答案是 ${currentQuestion.options[currentQuestion.answer]}`}${currentQuestion.explanation ? `。${currentQuestion.explanation}` : "。"}</p>`
+      : "";
+  const previousDisabled = currentIndex === 0 ? "disabled" : "";
+  const nextDisabled = currentIndex >= total - 1 ? "disabled" : "";
+  const submitDisabled = done === total ? "" : "disabled";
 
   return `
-    <section class="page-hero">
-      <div class="container">
-        <p class="eyebrow">答题页</p>
-        <h1>${title}</h1>
-        <p class="lead">${intro}</p>
+    <section class="page-hero quiz-hero">
+      <div class="container quiz-hero-grid">
+        <div>
+          <p class="eyebrow">答题页</p>
+          <h1>${title}</h1>
+          <p class="lead">${intro}</p>
+        </div>
+        <div class="quiz-hero-status">
+          <span>第 ${currentQuestion.order} / ${total} 题</span>
+          <strong>${getQuizStage(quizType, currentIndex, total)}</strong>
+        </div>
       </div>
     </section>
 
-    <section class="section">
+    <section class="section quiz-section">
       <div class="container quiz-shell">
-        <div class="card progress-wrap">
-          <div class="progress-meta">
-            <span>已完成 ${done} / ${total} 题</span>
-            <span>${percent}%</span>
+        <div class="quiz-progress-panel">
+          <div class="progress-wrap">
+            <div class="progress-meta">
+              <span>已完成 ${done} / ${total} 题</span>
+              <span>${percent}%</span>
+            </div>
+            <div class="progress-track" aria-label="答题进度">
+              <div class="progress-fill" style="width: ${percent}%"></div>
+            </div>
           </div>
-          <div class="progress-track" aria-label="答题进度">
-            <div class="progress-fill" style="width: ${percent}%"></div>
+          <div class="quiz-stepper" aria-label="题目导航">
+            ${renderQuizStepper(questions, answersMap, currentIndex, showFeedback)}
           </div>
         </div>
-        <section class="card question-group">
-          <header>
-            <h3>题目列表</h3>
-            <div class="quiz-header-actions">
-              ${extraActions}
-              <button class="btn group-submit" type="button" data-action="submit-quiz" data-submit-route="${submitRoute}" ${done === total ? "" : "disabled"}>${submitLabel}</button>
+        ${extraContent}
+        <div class="quiz-workspace">
+          <section class="question-stage ${questionClass}" aria-labelledby="currentQuestionTitle">
+            <div class="question-stage-top">
+              <div>
+                <p class="question-meta">${currentQuestion.label} · ${getQuizStage(quizType, currentIndex, total)}</p>
+                <p class="question-count">第 ${currentQuestion.order} 题</p>
+              </div>
+              <span class="question-status-pill ${currentAnswered ? "is-done" : ""}">${currentAnswered ? "已作答" : "待作答"}</span>
             </div>
-          </header>
-          ${extraContent}
-          ${groups}
-        </section>
+            <h2 class="question-title" id="currentQuestionTitle">${currentQuestion.question}</h2>
+            <div class="options quiz-options">${options}</div>
+            ${feedback}
+          </section>
+          ${renderQuizAside(quizType, questions, answersMap, currentQuestion, currentIndex, showFeedback)}
+        </div>
       </div>
     </section>
 
@@ -724,7 +931,9 @@ function renderQuizPage(
         <div class="button-row">
           ${buttonLink("返回首页", "#/", "secondary")}
           ${extraActions}
-          <button class="btn" type="button" data-action="submit-quiz" data-submit-route="${submitRoute}" ${done === total ? "" : "disabled"}>${submitLabel}</button>
+          <button class="btn secondary" type="button" data-action="quiz-nav" data-quiz-direction="prev" ${previousDisabled}>上一题</button>
+          <button class="btn secondary" type="button" data-action="quiz-nav" data-quiz-direction="next" ${nextDisabled}>下一题</button>
+          <button class="btn" type="button" data-action="submit-quiz" data-submit-route="${submitRoute}" ${submitDisabled}>${submitLabel}</button>
         </div>
       </div>
     </div>
@@ -1173,10 +1382,34 @@ function bindQuizEvents() {
     });
   });
 
+  document.querySelectorAll("[data-action='quiz-nav']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const path = window.location.hash.replace("#", "") || "/";
+      const quizType = getQuizTypeFromPath(path);
+      if (!quizType) return;
+      const questions = quizType === "knowledge" ? activeKnowledgeQuiz : activePersonaQuiz;
+      const delta = button.dataset.quizDirection === "next" ? 1 : -1;
+      activeQuizIndexByType[quizType] = clampQuizIndex(activeQuizIndexByType[quizType] + delta, questions.length);
+      render({ preserveScroll: true });
+    });
+  });
+
+  document.querySelectorAll("[data-action='go-question']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const path = window.location.hash.replace("#", "") || "/";
+      const quizType = getQuizTypeFromPath(path);
+      if (!quizType) return;
+      const questions = quizType === "knowledge" ? activeKnowledgeQuiz : activePersonaQuiz;
+      activeQuizIndexByType[quizType] = clampQuizIndex(Number(button.dataset.questionIndex), questions.length);
+      render({ preserveScroll: true });
+    });
+  });
+
   document.querySelectorAll("[data-action='submit-quiz']").forEach((submit) => {
     submit.addEventListener("click", () => {
       const path = window.location.hash.replace("#", "") || "/";
       const isKnowledge = path === "/knowledge" || path === "/knowledge-result";
+      const quizType = isKnowledge ? "knowledge" : "persona";
       const questions = isKnowledge ? activeKnowledgeQuiz : activePersonaQuiz;
       const answersMap = isKnowledge ? knowledgeAnswers : personaAnswers;
       const unanswered = questions
@@ -1184,6 +1417,9 @@ function bindQuizEvents() {
         .map((question) => question.order);
 
       if (unanswered.length > 0) {
+        const firstUnansweredIndex = questions.findIndex((question) => !answersMap[question.quizId]);
+        activeQuizIndexByType[quizType] = clampQuizIndex(firstUnansweredIndex, questions.length);
+        render({ preserveScroll: true });
         window.alert(`还有未完成的题目：第 ${unanswered.join("、")} 题。请先完成后再提交。`);
         return;
       }
