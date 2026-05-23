@@ -144,7 +144,7 @@ input {
   padding: clamp(46px, 7vw, 76px) clamp(18px, 4vw, 48px);
   background:
     linear-gradient(135deg, rgba(14, 34, 24, 0.78), rgba(14, 34, 24, 0.46)),
-    url("image/beijing.png") center / cover;
+    url("data/image/beijing.png") center / cover;
   border-bottom: 1px solid var(--line);
 }
 
@@ -161,8 +161,7 @@ input {
   color: #fff;
   background:
     linear-gradient(90deg, rgba(17, 43, 30, 0.8), rgba(17, 43, 30, 0.34)),
-    url("https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1800&q=80")
-      center / cover;
+    url("data/image/beijing.png") center / cover;
 }
 
 .hero-content {
@@ -536,7 +535,7 @@ p {
   padding: clamp(46px, 7vw, 76px) clamp(18px, 4vw, 48px);
   background:
     linear-gradient(135deg, rgba(245, 248, 244, 0.92), rgba(234, 243, 241, 0.88)),
-    url("image/beijing.png") center / cover;
+    url("data/image/beijing.png") center / cover;
   border-bottom: 1px solid var(--line);
 }
 
@@ -713,7 +712,7 @@ p {
   border-radius: 18px;
   background:
     linear-gradient(135deg, rgba(14, 34, 24, 0.82), rgba(40, 105, 76, 0.56)),
-    url("image/beijing.png") center / cover;
+    url("data/image/beijing.png") center / cover;
   font-size: 58px;
   letter-spacing: 0.08em;
 }
@@ -959,14 +958,21 @@ p {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  background:
+    linear-gradient(180deg, rgba(40, 105, 76, 0.04), rgba(63, 127, 157, 0.05)),
+    #fff;
 }
 
 .result-photo-panel img {
   display: block;
   width: 100%;
+  height: auto;
   aspect-ratio: 4 / 5;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
+  padding: clamp(10px, 2vw, 22px);
+  background:
+    linear-gradient(180deg, rgba(245, 248, 244, 0.86), rgba(255, 255, 255, 0.94));
 }
 
 .result-photo-caption {
@@ -1464,12 +1470,24 @@ p {
 }
 
 .detail-media {
-  min-height: 330px;
+  display: grid;
+  place-items: center;
+  min-height: 430px;
+  margin: 0;
+  padding: clamp(12px, 2vw, 24px);
+  overflow: hidden;
+  border: 1px solid rgba(40, 105, 76, 0.16);
   border-radius: var(--radius);
   background:
-    linear-gradient(180deg, rgba(28, 42, 34, 0.12), rgba(28, 42, 34, 0.36)),
-    url("https://images.unsplash.com/photo-1471193945509-9ad0617afabf?auto=format&fit=crop&w=1400&q=80")
-      center / cover;
+    linear-gradient(180deg, rgba(40, 105, 76, 0.05), rgba(63, 127, 157, 0.07)),
+    #fff;
+}
+
+.detail-media img {
+  display: block;
+  width: min(100%, 360px);
+  max-height: 520px;
+  object-fit: contain;
 }
 
 .profile-meta {
@@ -1488,22 +1506,19 @@ p {
   border-radius: var(--radius);
   background:
     linear-gradient(135deg, rgba(31, 77, 55, 0.75), rgba(201, 139, 47, 0.45)),
-    url("https://images.unsplash.com/photo-1531834685032-c34bf0d84c77?auto=format&fit=crop&w=900&q=80")
-      center / cover;
+    url("data/image/weiqiao.png") center / cover;
 }
 
 .person-photo.second {
   background:
     linear-gradient(135deg, rgba(75, 137, 168, 0.68), rgba(169, 84, 63, 0.45)),
-    url("https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=900&q=80")
-      center / cover;
+    url("data/image/liziqi.png") center / cover;
 }
 
 .person-photo.third {
   background:
     linear-gradient(135deg, rgba(47, 111, 78, 0.66), rgba(75, 137, 168, 0.46)),
-    url("https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=900&q=80")
-      center / cover;
+    url("data/image/huangwenxiu.png") center / cover;
 }
 
 .scenario-list {
